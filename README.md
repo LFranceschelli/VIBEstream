@@ -18,6 +18,13 @@ Set the execution flags at the top of `main.py` (`DO_STREAM`, `DO_RECORD`, `DO_P
 python main.py
 ```
 
+## Package (dummy)
+
+```python
+import vibestream
+print(vibestream.hello())
+```
+
 ## Author
 
 Luca Franceschelli, Universidad Carlos III de Madrid (UC3M)
