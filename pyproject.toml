@@ -9,7 +9,14 @@ description = "Real-time event-based imaging velocimetry (rt-EBIV) with live res
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
-authors = [{ name = "Luca Franceschelli", email = "lfrances@ing.uc3m.es" }]
+authors = [
+    { name = "Luca Franceschelli", email = "lfrances@ing.uc3m.es" },
+    { name = "Enrico Amico" },
+    { name = "Christian E. Willert" },
+    { name = "Marco Raiola" },
+    { name = "Gioacchino Cafiero" },
+    { name = "Stefano Discetti" },
+]
 keywords = ["event camera", "PIV", "velocimetry", "EBIV", "Kalman filter", "POD", "flow control"]
 classifiers = [
     "Programming Language :: Python :: 3",

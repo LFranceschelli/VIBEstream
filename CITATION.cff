@@ -6,8 +6,23 @@ license: MIT
 repository-code: "https://github.com/LFranceschelli/VIBEstream"
 authors:
   - family-names: Franceschelli
-    given-names: Luca
-    affiliation: "Universidad Carlos III de Madrid"
+    given-names: "Luca"
+    affiliation: "Department of Aerospace Engineering, Universidad Carlos III de Madrid, Leganés, Spain"
+  - family-names: Amico
+    given-names: "Enrico"
+    affiliation: "Department of Mechanical and Aerospace Engineering, Politecnico di Torino, Turin, Italy"
+  - family-names: Willert
+    given-names: "Christian E."
+    affiliation: "DLR Institute of Propulsion Technology, German Aerospace Center, Köln, Germany"
+  - family-names: Raiola
+    given-names: "Marco"
+    affiliation: "Department of Aerospace Engineering, Universidad Carlos III de Madrid, Leganés, Spain"
+  - family-names: Cafiero
+    given-names: "Gioacchino"
+    affiliation: "Department of Mechanical and Aerospace Engineering, Politecnico di Torino, Turin, Italy"
+  - family-names: Discetti
+    given-names: "Stefano"
+    affiliation: "Department of Aerospace Engineering, Universidad Carlos III de Madrid, Leganés, Spain"
 preferred-citation:
   type: article
   title: "Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry"
