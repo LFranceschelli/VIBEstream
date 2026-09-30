@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibestream"
+version = "1.0.0"
+description = "Real-time event-based imaging velocimetry (rt-EBIV) with live resolution enhancement"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Luca Franceschelli", email = "lfrances@ing.uc3m.es" }]
+keywords = ["event camera", "PIV", "velocimetry", "EBIV", "Kalman filter", "POD", "flow control"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+# The camera driver (Metavision SDK / OpenEB) and the Analog Discovery runtime
+# (Digilent WaveForms) are NOT on PyPI: install them separately (README).
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "opencv-python>=4.5",
+    "h5py>=3.0",
+    "matplotlib>=3.5",
+]
+
+[project.optional-dependencies]
+fast = ["numba>=0.56"]          # faster event accumulation (recommended)
+# GPU correlation: install torch with CUDA from https://pytorch.org (a plain
+# 'pip install torch' may give a CPU-only build).
+gpu = ["torch"]
+all = ["numba>=0.56", "torch"]
+
+[project.scripts]
+vibestream = "ebiv_gui:main"
+
+[project.urls]
+Repository = "https://github.com/LFranceschelli/VIBEstream"
+
+[tool.setuptools]
+package-dir = { "" = "lib" }
+py-modules = [
+    "vibe", "vibe_hr", "vibe_hr_live", "vibe_import", "vibe_train",
+    "ebiv_config", "ebiv_control", "ebiv_gpu", "ebiv_gui", "ebiv_hardware",
+    "ebiv_logger", "ebiv_piv", "ebiv_profiler", "ebiv_runtime", "ebiv_session",
+    "ebiv_utils", "ebiv_viz",
+]
