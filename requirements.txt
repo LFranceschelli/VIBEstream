@@ -1,0 +1,10 @@
+# pip install -r requirements.txt   (or, better: pip install -e .[fast])
+numpy>=1.22
+scipy>=1.8
+opencv-python>=4.5
+h5py>=3.0
+matplotlib>=3.5
+numba>=0.56          # optional, recommended (speed)
+# torch             # optional: GPU correlation, install the CUDA build from pytorch.org
+# Not on PyPI, install separately: Metavision SDK or OpenEB (camera, .raw files),
+# Digilent WaveForms (Analog Discovery: laser trigger / pump).

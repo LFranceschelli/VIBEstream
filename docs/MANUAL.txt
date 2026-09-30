@@ -1,0 +1,1312 @@
+NOTE (VIBEstream 1.0): this is the detailed manual of the real-time EBIV code
+as it was written during the internal releases 5.x ("VibeStream").  It is kept
+for the details (timing, control loop, ROIs, GPU path, hardware wiring).
+References to Release 4.0 / 5.0 and to files that are not in this repository
+(AUDIT_R4_to_R5.md, build_exe_optional.bat) are historical.  Start from
+README.md; the resolution enhancement is described in the GUI
+(Resolution enhancement > How it works...) and in lib/vibe_hr.py,
+lib/vibe_train.py and lib/vibe_import.py.
+
+================================================================================
+  VibeStream
+  EBIV — Event-Based Imaging Velocimetry, Release 5.2
+  Real-time EBIV with closed-loop water-jet control
+  L. Franceschelli, UC3M   lfrances@ing.uc3m.es
+================================================================================
+
+  DOUBLE-CLICK  VibeStream.bat
+
+  That is the whole answer to "what do I run".  It finds Python, opens the
+  parameter window, and leaves a console open with the log.
+
+  What is in this folder:
+
+      VibeStream.bat     double-click this
+      EBIV_Main.py       the only file you ever edit: flags at the top
+      ReadMe.txt         this file
+      AUDIT_R4_to_R5.md  what was wrong with Release 4.0 and what changed
+      lib/               the library. You never open it.
+      tools/             tests, benchmark, simulation. Never needed to run
+                         an experiment.
+
+  Why a .bat and not a .exe: an .exe would freeze EBIV_Main.py inside it, so
+  every flag, ROI, gain or laser frequency change would mean rebuilding.
+  Editing the file and double-clicking the .bat is the same experience with
+  none of that.  For a desktop icon, right-click VibeStream.bat -> Send to ->
+  Desktop (create shortcut).  tools/build_exe_optional.bat will build a real
+  exe if you want one anyway; read its header first.
+
+  --------------------------------------------------------------------------
+  IF THE CAMERA WORKED BEFORE AND NOW GIVES A WINDOWS DLL DIALOG
+  --------------------------------------------------------------------------
+  Symptom: a modal Windows box saying the procedure entry point could not be
+  found in  ...\Prophesee\lib\metavision\hal\plugins\hal_plugin_prophesee.dll
+
+  This is NOT "the camera is unplugged".  With the SDK healthy and no camera
+  connected you get a clean console line instead:
+
+      No devices found. Check connection and MV_HAL_PLUGIN_PATH.
+
+  The dialog appears at DeviceDiscovery.list(), i.e. when HAL enumerates its
+  plugins - before it looks for hardware.  The HAL plugins are C++ DLLs; which
+  dependencies they resolve to depends on PATH.  So the SAME code opens the
+  camera under one interpreter and fails under another.  Anaconda is the usual
+  culprit: its Library\bin shadows Prophesee's own dependencies.
+
+  Diagnosis, one command, run it from the place where the camera DOES work:
+
+      python tools/check_env.py
+
+  Run it again from the interpreter VibeStream.bat prints at startup.  If the
+  "executable" lines differ, paste the working one into PYTHON_EXE at the top
+  of VibeStream.bat (or put the conda environment name in CONDA_ENV - a conda
+  env must be ACTIVATED, not just have its python.exe called, because
+  activation is what fixes PATH, and PATH is the whole problem).
+
+  VibeStream.bat prints the interpreter, the package check and the metavision
+  import result before it starts, so this is visible at a glance.
+  --------------------------------------------------------------------------
+
+Release 4.0 and Release 5.0 are untouched and remain in their own folders.
+
+Release 5.1 added a parameter GUI on top of Release 5.0.  Release 5.2 adds
+the 'live' reference (you set the target velocity by hand with [+]/[-] while
+the loop is closed), GPU correlation for the live stream with sub-pixel and CC
+so the closed loop can use it, the offline GPU path with the Release 4.0
+homothetic scaling bug fixed (audit B7/B8), one entry point with a launcher,
+and a single-source version string written into every run's config.json.
+
+Release 5.2 keeps Release 4.0's event acquisition, pseudo-frame generation,
+offline image generation and offline pyramidal PIV, and adds a closed-loop
+controller for a water jet driven by an Aqua Medic EcoDrift 4.3 pump through
+an Analog Discovery 3.
+
+  AUDIT_R4_to_R5.md   the Release 4.0 audit, the bug list, and the CPU
+                      profiling results.  Read it before trusting any number
+                      in this file.
+
+--------------------------------------------------------------------------------
+  QUICK START
+--------------------------------------------------------------------------------
+
+  Double-click VibeStream.bat for the window, or edit the flags at the top of
+  EBIV_Main.py and run:   python EBIV_Main.py
+
+  I just want to see the live stream
+        FLAG_STREAM = True ;  STREAM_MODE = 'ebiv'
+        (press [p] in the window to switch the vectors on)
+
+  The laser does not come on
+        FLAG_TEST_LASER = True ;  AD3_ENABLED = True
+        This opens the Analog Discovery, starts the laser, and holds it until
+        you press Enter.  It does nothing else, so it tells you in ten seconds
+        whether the problem is hardware or software.  Check:
+          - the WaveForms desktop application is CLOSED (it locks the device)
+          - DEVICE_INDEX = -1
+          - LASER_AMPLITUDE_V / LASER_OFFSET_V: the wave swings
+            OFFSET +- AMPLITUDE, so 2.5 and 2.5 gives 0..5 V
+
+  Record a .raw, make frames from it, and run offline PIV
+        FLAG_STREAM = False
+        FLAG_RECORD = True ; FLAG_IMAGE_GEN = True ; FLAG_PIV_PROCESS = True
+        They run in that order, in one go.
+
+  Find the pump voltage -> jet velocity curve   (DO THIS BEFORE ANY PID GAIN)
+        FLAG_STREAM = True ;  STREAM_MODE = 'calibration' ;  AD3_ENABLED = True
+        Set CAL_VOLTAGES and CAL_DWELL_S in section 8.
+
+  Close the loop
+        FLAG_STREAM = True ;  STREAM_MODE = 'closed_loop' ;  AD3_ENABLED = True
+        Starts DISARMED.  Press [c] in the image window to arm it.
+
+  Prefer clicking to editing?
+        FLAG_GUI = True    opens a window with all of it, starting from the
+                           values in this file.
+
+  Nothing here needs the tools/ or lib/ folders.  lib/ is the library;
+  tools/ is tests, a benchmark and an offline simulation.
+
+--------------------------------------------------------------------------------
+  KEYBOARD REFERENCE   (press these on the "EBIV Live Stream" window)
+--------------------------------------------------------------------------------
+
+  ALWAYS AVAILABLE
+    q     quit; the pump is driven to the safe voltage on the way out
+    p     RT-EBIV on/off (the vectors).  OFF while a controller runs makes the
+          measurement go stale: the supervisor will HOLD, then go SAFE
+    v     Westerweel-Scarano validation on/off
+    d     double exposure: overlay the previous frame on the current one
+    b     blackout: hide the image, show only the vectors
+    s     start/stop recording a .raw file
+    w     start/stop saving .tif frames
+    f     start/stop saving RT-PIV fields as .mat
+    g     strip chart on/off (target, filtered, raw, pump voltage vs time)
+    u     CROSS-STREAM PROFILE on/off  -- see below
+    U     restart the profile averaging (shift+u)
+
+  ONLY IN A CONTROL MODE  ('manual', 'calibration', 'closed_loop')
+    +/-   loop OPEN   : move the pump voltage by CAL_MANUAL_STEP_V
+          loop CLOSED : move the TARGET by REF_LIVE_STEP, if the reference
+                        kind is 'live'; otherwise they do nothing and say so
+    c     arm / disarm the closed loop (bumpless both ways)
+    t     snap the live target onto the current measured velocity.  Press [t]
+          then [c] and the loop closes with zero initial error
+    0     set the pump to SAFE_PUMP_VOLTAGE and return to MANUAL
+    x     EMERGENCY: force the SAFE state immediately
+
+  In STREAM_MODE = 'ebiv' the six control keys do nothing, and say so: that
+  mode creates no pump object and no control thread.
+
+  THE CROSS-STREAM PROFILE  [u]
+    Plots the feedback component across the WHOLE DisplayROI, averaged along
+    the stream and smoothed over frames, with the ControlROI marked on it.
+    Use it to put the ControlROI on the potential core rather than across the
+    shear layers.  The footer reports the ControlROI mean and the spread
+    across it; above 15% of the mean it warns, because a mean taken over a
+    steep part of the profile moves when the jet flaps and when the ROI is a
+    few pixels off.
+
+    For '-u' or 'u' (a horizontal jet) the profile runs down the rows; for
+    'v' or '-v' it runs across the columns.
+
+--------------------------------------------------------------------------------
+  0. READ THIS FIRST
+--------------------------------------------------------------------------------
+
+  * The WaveForms desktop application holds an EXCLUSIVE lock on the Analog
+    Discovery.  Release 5.0 opens the device from Python, so WaveForms must be
+    CLOSED.  Because Python then owns the device, Release 5.0 also generates
+    the laser waveform.  Transcribe your GUI settings into the LASER_*
+    parameters in EBIV_Main.py, or there will be no laser.
+
+  * Run FLAG_VERIFY_HARDWARE once, with an oscilloscope on the laser output,
+    before trusting any closed-loop result (§8).
+
+  * Run RUN_MODE='calibration' before choosing PID gains (§6.3).  There is no
+    voltage-to-velocity relation hard-coded anywhere in this software, and you
+    should not assume one is linear.
+
+  * SAFE_PUMP_VOLTAGE defaults to 0.0 V.  Decide for your facility whether
+    stopping the pump is actually the right thing to do when the controller
+    loses sight of the flow; holding a low but non-zero flow is often better.
+
+  * The controller never arms itself.  'closed_loop' starts in MANUAL; you
+    press [c].
+
+
+--------------------------------------------------------------------------------
+  0b. VERIFICATION STATUS
+--------------------------------------------------------------------------------
+
+What HAS been verified, with no hardware:
+
+  184  unit checks        EBIV bit-equivalence with Release 4.0, ControlROI,
+                          filters, PID, fault handling, references, closed loop
+                          against a simulated plant, units, image flip, config,
+                          logging, visualisation, session and offline chain
+   48  hardware sequence  the real Analog Discovery code driven against a fake
+                          WaveForms runtime that records every ctypes call
+   31  GUI checks         parameter binding, tab visibility, widget round-trip,
+                          bad input, wheel scrolling, log handling, presets
+   23  integration        the real stream_camera() against a synthetic event
+                          stream, recovering an injected 4.0 px/frame
+
+What has NOT been verified, and can only be verified at the rig:
+
+  * that the AD3 actually leaves the laser undisturbed when the pump voltage
+    changes.  The software is written so that it should, and the call sequence
+    is now proven, but only the oscilloscope procedure in section 8 settles it.
+  * that the camera, the Metavision SDK and the real event rate behave as the
+    synthetic stream does.
+  * any PID gain.  There is no calibration yet, so the gains ship at zero.
+  * the CPU numbers in AUDIT_R4_to_R5.md, which were measured on a shared
+    2-core cloud machine.  Run bench_release5.py on the lab PC.
+
+
+--------------------------------------------------------------------------------
+  1. FILES
+--------------------------------------------------------------------------------
+
+  VibeStream.bat       double-click launcher: opens the parameter window
+  EBIV_Main.py         Entry point.  All user-facing parameters.
+
+  lib/ — the library.  You never need to open any of these:
+  ebiv_config.py       Every parameter, as validated dataclasses, plus
+                       RunConfig/Session and preset save/load.
+  ebiv_piv.py          CPU correlation engine (CPUCorrelator).
+  ebiv_control.py      Control law: ControlROIEstimator, TemporalFilter,
+                       ReferenceGenerator, PIDController, ControlSupervisor.
+                       No hardware, no camera, no OpenCV.
+  ebiv_hardware.py     Analog Discovery 3 layer + MockPump + the oscilloscope
+                       verification procedure.
+  ebiv_runtime.py      Threading: PIV worker, control thread, async file
+                       saver, latency statistics, calibration driver,
+                       closed-loop simulation.
+  ebiv_logger.py       ExperimentLogger (CSV + .mat + JSON header).
+  ebiv_viz.py          Vector overlay, ControlROI rectangle, status HUD,
+                       strip chart.  OpenCV only; no matplotlib in the live
+                       path.
+  ebiv_utils.py        Release 4.0 core with the audit fixes applied, plus
+                       the rewritten stream_camera.
+  ebiv_gui.py          The parameter window (tkinter).  New in 5.1.
+  ebiv_session.py      run_session(): one entry point that runs either the
+                       live stream or the offline chain.  New in 5.1.
+  ebiv_profiler.py     Release 4.0 profiler, unchanged.
+  ebiv_gpu.py          Release 4.0 GPU backend, byte-identical.  NOT used by
+                       Release 5.x — see AUDIT_R4_to_R5.md bugs B7 and B8.
+
+  tools/               never needed to run an experiment:
+    test_release5.py       149 unit checks; also runs the two below
+    test_hardware_mock.py  48 Analog Discovery call-sequence checks against a
+                           fake WaveForms runtime
+    test_integration.py    23 checks: the real stream_camera() against a fake
+                           camera
+    test_gui.py            31 GUI checks (needs tkinter)
+    simulate_control.py    closed loop against a simulated plant
+    bench_release5.py      CPU benchmark, R4 vs R5, on YOUR machine
+
+
+--------------------------------------------------------------------------------
+  1b. THE PARAMETER WINDOW  (new in Release 5.1)
+--------------------------------------------------------------------------------
+
+    VibeStream.bat               double-click; always opens the window
+    python EBIV_Main.py --gui    the same thing from a prompt
+    python EBIV_Main.py          obey the flags in the file instead
+
+Editing EBIV_Main.py by hand still works exactly as before: set FLAG_GUI to
+False and everything behaves like Release 5.0.
+
+  1.  Choose what to run, at the top of the window:
+
+        Live streaming    the camera path, with the streaming sub-mode next
+                          to it: ebiv / manual / calibration / closed_loop.
+        Offline chain     record .raw, play back, generate frames, offline
+                          PIV.  Tick any subset; they run in that order, in
+                          one go.
+
+      The tabs follow the choice: the offline chain hides the controller,
+      hardware and calibration tabs, and the streaming sub-mode is disabled.
+
+  2.  Edit the parameters on the tabs.  110 parameters are exposed; hovering
+      a label shows what it does and what it costs.  The tabs are
+
+        Run           output folders, acquisition name, raw file, profiler
+        Acquisition   f_acq, contrast clamp, trigger, image flips, biases
+        PIV & ROIs    window, node distance, workers, sub-pixel, validation,
+                      DisplayROI and ControlROI
+        Offline       frame generation and pyramid levels  (offline only)
+        Feedback      streamwise component, validity gates, px/mm units
+        Controller    filter, reference trajectory, PID, rates, safe state
+        Hardware      Analog Discovery: laser and pump channels
+        Calibration   the open-loop voltage programme, and logging
+        Display       refresh rates, arrow decimation, strip chart
+        Log           everything the last run printed; save it to a file
+
+  3.  Validate, then Run.
+
+Presets.  Save preset... / Load preset... write the whole configuration as
+JSON, so one file describes one experiment completely.  The current settings
+are also written to VibeStream_last_settings.json (next to EBIV_Main.py) when
+you press Run, and restored the next time the window opens, so you do not have to re-enter anything.  A
+preset written by a different version still loads: unknown entries are
+ignored and listed rather than refused.
+
+Validation.  Validate (and Run) check the acquisition parameters, the
+control-system cross-checks, ControlROI containment, the pump voltage limits
+and the reference file, and report every problem at once.  Starting a closed
+loop with the Analog Discovery enabled asks for confirmation first.
+
+What the window does NOT do yet.  While a run is in progress the window is
+hidden and the pipeline owns the process: the live stream opens its own
+OpenCV windows, and the offline steps print to the console.  The window
+returns when the run ends, with the whole log on the Log tab.  A live log and
+a Stop button need the pipeline on a worker thread, which takes care because
+OpenCV HighGUI and matplotlib both want the main thread — that is a 5.2 item,
+not an oversight.
+
+Adding a parameter.  Add the field to the dataclass in ebiv_config.py and one
+line to PARAM_SPEC in ebiv_gui.py.  There is no second copy of the parameter
+list, and the test-suite fails if a spec entry points at nothing or if a
+config field is neither exposed nor listed in INTENTIONALLY_HIDDEN — so a new
+field cannot quietly become unreachable from the GUI.
+
+
+--------------------------------------------------------------------------------
+  2. ARCHITECTURE AND CONTROL DATA FLOW
+--------------------------------------------------------------------------------
+
+    event camera
+        |  EventsIterator(delta_t = accum_time_us)
+        v
+    ACQUISITION THREAD (main)
+        event accumulation  ->  pseudo-frame (uint8)
+        crop to DisplayROI
+        piv_queue.put((frames, t_frame, validate))     Queue(maxsize=1)
+        ... also owns every OpenCV window; HighGUI is not thread-safe
+        |
+        v
+    PIV WORKER THREAD                            runs as fast as it can
+        CPUCorrelator.correlate()   ->  U, V, CC
+        universal_outlier_detection ->  cleaned field + validity mask
+        FieldHolder.publish(...)                 for the display
+        ControlROIEstimator.estimate(U, V, mask, CC)
+              raw U,V + mask, so rejected vectors are EXCLUDED, not
+              replaced by a local median
+        MeasurementHolder.publish(Measurement(...))   one atomic assignment
+        |
+        v
+    CONTROL THREAD                               control_rate_hz, independent
+        m = MeasurementHolder.read()
+        validity: valid flag, finite, fresh sequence, age < max_age
+        TemporalFilter.update(u_raw, measured dt)     -> U_control_filtered
+        ReferenceGenerator(t since arming)            -> U_target
+        PIDController.update(target, filtered, measured dt)
+        PumpBackend.set_voltage(V)                    -> AD3 W2, or MockPump
+        ExperimentLogger.log_step(...)
+        StripChart.append(...)                        deque append only
+        |
+        v
+    Analog Discovery 3, Analog Out ch1 (W2)  ->  EcoDrift 4.3 0-10 V input
+
+Three rates, all independent and all configurable:
+
+    EBIV field rate          as fast as the correlator manages
+    control_rate_hz          default 10 Hz
+    visualization_rate_hz    default 20 Hz   (main image)
+    plot_rate_hz             default  5 Hz   (strip chart)
+
+Rendering can never determine control timing: the controller runs on its own
+thread, and the strip chart only receives deque appends from it.
+
+Every dt is MEASURED with time.perf_counter(), never assumed.  The control
+thread advances its wake-up by exactly one period so jitter does not
+accumulate into drift, and re-bases (rather than firing catch-up steps) if it
+falls more than three periods behind.  The measured control interval and the
+end-to-end latency are reported at the end of every run.
+
+Threading rationale.  The expensive stage is one scipy FFT call that releases
+the GIL, so a single PIV worker genuinely overlaps with acquisition.  More
+Python-level PIV threads would not help.  Multiprocessing was considered and
+rejected: shipping ~14 MB of window buffers per field across a pipe costs more
+than the correlation.
+
+
+--------------------------------------------------------------------------------
+  3. THE TWO ROIs
+--------------------------------------------------------------------------------
+
+  DisplayROI   [x0, x1, y0, y1] in sensor pixels, or None for the full sensor.
+               Where vectors are computed and drawn.  Release 4.0's
+               `processing_roi`.
+
+  ControlROI   [x0, x1, y0, y1] in sensor pixels.  Must be inside DisplayROI;
+               this is checked at start-up and a violation is refused with a
+               message naming both regions.  Only vectors here feed the
+               controller.  It is drawn on the live image as a cyan rectangle
+               with corner ticks, so what the controller is looking at is
+               never in doubt.
+
+Both are set independently in EBIV_Main.py §A.  Changing the ControlROI does
+not change the DisplayROI or the vector field you see.
+
+Grid nodes are selected once, at start-up, as a contiguous slice — not with a
+per-frame boolean mask.  Node (gy,gx) has its window centre at
+`display_roi[0] + gx*node_distance + window_size//2` (and likewise in y), so
+the ControlROI must be at least one node spacing across in both directions;
+if it selects no nodes, start-up fails with a message telling you the node
+spacing.
+
+Cropping the DisplayROI is the single biggest performance lever: correlation
+cost scales with the number of interrogation windows.  A 900x400 ROI is about
+a quarter of the work of a full 1280x720 frame.
+
+IMAGE FLIP (FLAG_FLIP_X / FLAG_FLIP_Y), and how it interacts with the ROIs.
+
+  Both flags are inherited from Release 4.0 and still work.  The flip is
+  applied to the FULL sensor frame at frame construction, so it propagates
+  consistently to the display, the RT-PIV, the .tif saving and the offline
+  PIV — everything downstream sees the same mirrored image.
+
+  Two consequences, both printed at start-up whenever a flip is active:
+
+  1. The flip happens BEFORE the ROI crop, so DISPLAY_ROI and CONTROL_ROI are
+     then in FLIPPED-image coordinates, not raw-sensor coordinates.  A
+     rectangle at x = 200..1100 in the flipped image of a 1280 px sensor is
+     x = 180..1080 on the sensor itself.  Start-up prints the equivalent
+     raw-sensor rectangles for both ROIs so you can check them against what
+     you see through the camera.
+
+  2. flip_x negates U; flip_y negates V.
+
+  IF YOUR ONLY PROBLEM IS THE SIGN — the jet runs right-to-left and the
+  controller wants a positive streamwise component — DO NOT USE A FLIP.  Set
+
+      CONTROL_COMPONENT = '-u'
+
+  instead.  It costs nothing, leaves the ROI coordinates in the sensor's own
+  frame, and leaves the saved .tif and velocity fields unmirrored, so the
+  data still means what the camera actually saw.  The test-suite asserts that
+  '-u' on the raw image and 'u' on the flipped image give the identical
+  feedback value.
+
+  Use a flip when you want the IMAGE ITSELF mirrored — typically so the live
+  display reads left-to-right and matches how you think about the facility,
+  or to match an earlier data set.  That is a presentation choice, and it is
+  a perfectly good reason; just set the ROIs in the flipped frame.
+
+  Note also the Release 4.0 limitation, unchanged: flip_state is a per-run
+  guard, so re-processing .tif files that already had the flip baked in
+  during an earlier run will flip them a second time.
+
+
+--------------------------------------------------------------------------------
+  4. THE FEEDBACK VELOCITY
+--------------------------------------------------------------------------------
+
+    U_control_raw = statistic( component(U,V) over VALID nodes in ControlROI )
+                    * velocity_scale
+
+  component     'u'  = +U   (jet left -> right; the shipped default)
+                '-u' = -U
+                'v'  = +V   (V is positive DOWNWARD in this codebase)
+                '-v' = -V   (an upward jet)
+                'magnitude'  available but NOT recommended for a jet: it is
+                             positive-definite, cannot distinguish forward
+                             from reverse flow, and biases high in noise.
+
+  statistic     'mean' (default) or 'median'.
+
+  A node is VALID when all of these hold:
+      - U and V are finite;
+      - it passed Westerweel-Scarano outlier detection (the mask, not the
+        substituted value);
+      - its normalised correlation coefficient >= min_correlation, when
+        use_correlation_gate is on;
+      - |U|,|V| <= max_abs_displacement_px, when that is set.
+
+  The measurement is declared INVALID, and never reaches the PID, when
+      n_valid < max(min_valid_vectors, ceil(min_valid_fraction * n_total)).
+
+TERMINOLOGY.  This is a CONTROL-REGION velocity estimate.  If the ControlROI
+sits on the jet core it is a core velocity — it is NOT the cross-sectional
+bulk velocity and NOT the nozzle exit velocity.  The variable is called
+U_control everywhere in the code and the logs for exactly that reason.
+Displaying it as "Uj" is a labelling convenience; the definition above is what
+it actually is.
+
+UNITS.  U_control is computed in px/frame and converted ONCE, at the
+measurement, so the whole loop stays internally consistent in whatever unit
+you choose.  There are two ways to set it.
+
+  Working in m/s (recommended).  Set the optical resolution you read off a
+  calibration target:
+
+      CALIBRATION_PX_PER_MM = 20.0        # px/mm
+      PULSE_SEPARATION_S    = None        # None -> derived, see below
+
+  and the set-point, the measurement, the PID gains, the output limits, the
+  logs, the plots and the HUD are all in m/s.  The conversion is
+
+      U [m/s] = U [px/pulse] / CALIBRATION_PX_PER_MM * 1e-3 / dt
+
+  dt is the separation between the two correlated pseudo-frames.  Leaving
+  PULSE_SEPARATION_S = None derives it from the acquisition: consecutive
+  pseudo-frames are one accumulation window apart, so dt = 1/f_acq — which is
+  exactly 1/f_laser when the laser fires once per pseudo-frame, i.e. when
+  LASER_FREQUENCY_HZ == f_acq.  Set it explicitly only if that is not true,
+  for example with pulse-pair illumination.  If LASER_FREQUENCY_HZ and f_acq
+  disagree, start-up says so, because then one of the two is misconfigured.
+
+  Working in px/frame.  Leave CALIBRATION_PX_PER_MM = None.  Nothing is
+  assumed about the optics at all.
+
+Start-up prints the resolved conversion both ways, for example at 20 px/mm
+and 500 Hz:
+
+      frame separation dt : 2000.0 us (500.00 Hz)  [accumulation window]
+      resolution          : 20 px/mm
+      1 px/frame          = 0.025 m/s
+      1 m/s               = 40 px/frame
+
+WATCH THE GAINS.  The PID gains are in volts per (velocity unit), so changing
+units rescales them: at 40 px/frame per m/s, a controller tuned in px/frame
+needs gains 40x larger to mean the same thing in m/s.  Start-up prints that
+factor.  Tune in the unit you intend to run in.
+
+WATCH THE DYNAMIC RANGE.  A set-point in m/s implies a displacement in px,
+and the correlation can only measure so much.  Start-up converts the peak
+set-point to px/frame and compares it against the interrogation window:
+
+Since  displacement [px] = U * dt * (px per metre),  a LONGER dt (lower f_acq)
+gives a LARGER pixel displacement, and a shorter dt a smaller one:
+
+    > window_size/2   the correlation WRAPS. It cannot be measured at all and
+                      the loop will chase noise. Start-up flags this loudly
+                      and names the f_acq that would fix it. Shorten dt (RAISE
+                      f_acq), enlarge window_size, or reduce the magnification.
+    > window_size/4   beyond the usual PIV rule of thumb; correlation quality
+                      degrades. Check the CC column. Start-up suggests an
+                      f_acq that brings it back.
+    < 0.5 px/frame    sub-pixel noise dominates the feedback signal. Lengthen
+                      dt (LOWER f_acq) or increase the magnification.
+
+  At 20 px/mm, 500 Hz and window_size = 48, the usable band is roughly
+  0.0125 to 0.3 m/s, with 0.3 m/s already at the quarter-window limit.  Check
+  this against your intended operating range BEFORE the first run; it may
+  drive your choice of f_acq, magnification or window size.
+
+
+--------------------------------------------------------------------------------
+  5. TEMPORAL FILTER
+--------------------------------------------------------------------------------
+
+  'none'  U_control_filtered == U_control_raw.
+  'ma'    Moving average over the last `window` VALID samples.
+          Group delay ~ (window-1)/2 samples.
+  'ema'   First-order low-pass.  alpha = dt/(tau+dt) is recomputed from the
+          MEASURED dt every update, so the corner stays at 1/(2*pi*tau) even
+          when the loop jitters.  Group delay ~ tau seconds.
+
+Both U_control_raw and U_control_filtered are kept, logged and plotted.  The
+PID uses the filtered value.
+
+Filtering is not free.  A moving average of length N at control rate f_c adds
+about (N-1)/(2*f_c) seconds of phase lag directly into your loop.  The filter
+kind and its length are printed in the run header and written into every log,
+so the delay you chose is never invisible.  The test-suite measures the
+group delay of a length-21 moving average and asserts it is (N-1)/2 samples.
+
+Dropouts do not corrupt the filter: only valid samples are fed in, so a bad
+field neither injects a zero nor advances the memory.
+
+
+--------------------------------------------------------------------------------
+  6. RUNNING IT
+--------------------------------------------------------------------------------
+
+6.1  EBIV only — Release 4.0 behaviour
+
+     FLAG_STREAM = True ;  RUN_MODE = 'ebiv'
+
+     No pump backend is created and no voltage is ever issued.  Set
+     PIV_SUBPIXEL = False to reproduce Release 4.0's real-time output
+     bit-for-bit (the test-suite asserts this).
+
+6.2  Manual / open-loop pump control
+
+     FLAG_STREAM = True ;  RUN_MODE = 'manual'
+
+     rtEBIV keeps measuring; [+] and [-] step the voltage by
+     CAL_MANUAL_STEP_V, [0] returns to the safe voltage.  Everything is
+     logged.  Use this to find the operating range before automating it.
+
+6.3  Open-loop calibration  — DO THIS BEFORE TUNING
+
+     FLAG_STREAM = True ;  RUN_MODE = 'calibration'
+     CAL_MODE = 'steps'   (or 'sweep')
+
+     'steps' holds each of CAL_VOLTAGES for CAL_DWELL_S; the first
+     CAL_SETTLE_S of each dwell is marked as transient so you can separate the
+     static curve from the response.  'sweep' ramps v_start -> v_stop over
+     CAL_SWEEP_DURATION_S and optionally back, which exposes hysteresis.
+
+     Logged per control step: timestamp, commanded voltage, U_control_raw,
+     U_control_filtered, n_valid / n_total, controller state.  From this you
+     get both the static map V -> U_control and the transient response
+     (time constant, dead-band, transport delay) that the gains must be based
+     on.  Nothing in the software presumes the shape of that map.
+
+6.4  Closed loop
+
+     FLAG_STREAM = True ;  RUN_MODE = 'closed_loop'
+
+     Starts in MANUAL.  Bring the jet to a sensible operating point with
+     [+]/[-], wait until the HUD shows a stable U_ctrl_flt and a healthy
+     valid-vector count, then press [c].  Arming is bumpless: the PID's
+     integral is preloaded so its first output equals the voltage the pump is
+     already receiving.  [c] again disarms, holding the present voltage.
+     [x] forces the SAFE state at any time.
+
+     Arming is refused if there is no valid velocity measurement yet.
+
+     WHAT [+] AND [-] DO depends on whether the loop is closed, because that
+     decides what is actually yours to command:
+
+       loop OPEN (MANUAL or SAFE)
+           the PUMP VOLTAGE, in steps of CAL_MANUAL_STEP_V.  There is no
+           target yet, so the voltage is the only thing to move.
+
+       loop CLOSED (or HOLD) with REFERENCE_KIND = 'live'
+           the TARGET VELOCITY, in steps of REF_LIVE_STEP, clamped to
+           [REF_LIVE_MIN, REF_LIVE_MAX].  The PID owns the voltage; you say
+           how fast the jet should go and it works out the rest.  This is the
+           point of closing the loop: you command the physical quantity, not
+           the actuator.
+
+       loop CLOSED with any other REFERENCE_KIND
+           nothing, and the log says so.  The target is following its own
+           trajectory (step, sine, file, random) and letting a key press
+           silently override it would corrupt the run.  Disarm with [c] if
+           you want the voltage back.
+
+     Every press logs which of the two moved, and the HUD carries a
+     "live target" line whenever the reference is operator-driven.
+
+     [t] snaps the live target onto the current filtered velocity.  Press it
+     just before [c] and the loop closes with zero initial error, so the only
+     thing that then moves the jet is your own [+]/[-].
+
+     'live' is the interactive counterpart of RUN_MODE = 'manual'.  They are
+     not the same thing and it is worth being clear which you want:
+
+         RUN_MODE 'manual'                 REFERENCE_KIND 'live'
+         no controller                     PID running
+         [+]/[-] set the pump voltage      [+]/[-] set the target velocity
+         the jet does what the pump does   the jet is held at what you asked
+         use it for calibration            use it for an experiment
+
+6.5  No hardware at all
+
+     FLAG_SELFTEST = True        run the 104-check test-suite
+     FLAG_SIMULATE = True        closed loop against a simulated plant,
+                                 writes simulation_output/*.png
+     python bench_release5.py    CPU benchmark on your machine
+
+     The whole control law, logger, ROI selection and visualisation run with
+     no camera and no Analog Discovery.  ebiv_control.py has no module-level
+     dependency on ebiv_hardware.py, and the test-suite asserts that.
+
+6.6  Keyboard
+
+     [q] quit                  [d] double exposure       [s] record .raw
+     [p] RT-EBIV on/off        [v] outlier validation    [w] save .tif
+     [f] save RT-PIV .mat      [b] background blackout   [g] strip chart
+     [c] arm / disarm the closed loop
+     [+] [-] manual pump voltage step
+     [0] pump to the safe voltage, MANUAL
+     [x] EMERGENCY: force SAFE
+
+
+--------------------------------------------------------------------------------
+  6b. THE GPU PATH   (restored and fixed in Release 5.2)
+--------------------------------------------------------------------------------
+
+  PIV_USE_GPU = True            (or the "GPU correlation" tick on PIV & ROIs)
+
+  Needs torch built with CUDA.  Without it the run falls back to the CPU and
+  says so, so leaving the flag on is harmless.  torch is installed PER
+  INTERPRETER: if check_gpu.py says it is missing, check WHICH python it
+  printed before concluding anything about the machine.
+
+  WHAT IT COVERS
+
+    Live stream, including closed loop    yes
+    Offline pyramidal PIV                 yes
+
+  HOW IT PARALLELISES
+
+    All the interrogation windows of ONE snapshot, together.  torch.unfold
+    turns the frame into an (N, ws, ws) batch where N = grid_y * grid_x, and
+    one batched rfft2/irfft2 covers the lot.  Snapshots are still processed
+    one after another, so the speed-up scales with N: a large DisplayROI with
+    a small node distance gives the GPU real work.
+
+  IS IT SAFE FOR THE CLOSED LOOP?
+
+    For CORRECTNESS, yes, and this was not true before Release 5.2.
+
+    Release 4.0's real-time GPU kernel (batch_cross_correlate) returns the
+    INTEGER peak and no CC, because Release 4.0's CPU path did the same and
+    there was no controller to feed.  Release 5 needs both: sub-pixel because
+    a 1 px quantisation on a 5 px displacement is a 20% quantisation of the
+    feedback signal, and CC because the ControlROI validity gate is what
+    decides whether a measurement may reach the PID at all.
+
+    Release 5.2 adds GPUCorrelator.correlate(), which returns (U, V, CC) with
+    sub-pixel, exactly like CPUCorrelator.  Measured against it: identical
+    integer peaks, ~3e-6 px on the sub-pixel displacement, ~3e-6 relative on
+    CC, in both 2-frame and triple-correlation mode.  The estimator and the
+    PID cannot tell which backend produced the numbers.
+
+    For LATENCY, unknown, and this is the part to be careful about.  A GPU
+    buys THROUGHPUT; a control loop cares about the delay from photons to
+    voltage and about how much that delay varies.  The host-device round trip
+    adds both, and Release 4.0's own report measured 1.71 ms just to upload
+    three frames.  Before trusting PID gains tuned on the GPU, run the same
+    configuration on both backends and compare the latency summary printed at
+    the end of the run.  Nothing here claims the GPU is faster for the loop.
+
+  DO NOT EXPECT RELEASE 4.0's SPEED-UP NUMBER
+
+    That report measured a kernel doing neither sub-pixel nor CC.  Both are
+    real extra work.  The 14.4x on the correlation stage does not carry over
+    to correlate(); measure it on your own hardware.
+
+  BEFORE YOU TRUST A GPU RESULT
+
+        python tools/check_gpu.py
+
+    Runs the real offline PIV on both backends over the same synthetic frames
+    with a known displacement and compares them.  Release 4.0's offline path
+    was wrong twice (audit B7, B8) - and, on the evidence, was never actually
+    run, because B7 raises on the first snapshot.  Both are fixed in 5.2, but
+    the fix was verified on CPU tensors because the machine that wrote it has
+    no CUDA.  This closes that gap on YOUR hardware, and it detects each of
+    the historical bugs if they are ever reintroduced.
+
+  CAVEAT: on the OFFLINE pyramidal path CC is not computed and is saved as
+  NaN.  The live path does compute it.
+
+
+--------------------------------------------------------------------------------
+  7. ANALOG DISCOVERY 3: CHANNEL ALLOCATION AND API CALLS
+--------------------------------------------------------------------------------
+
+7.1  Allocation (defaults)
+
+     Analog Out ch0  (W1)  laser trigger, continuous square wave
+     Analog Out ch1  (W2)  pump command, DC, 0..5 V
+     Analog In  ch0  (1+)  optional, only for the self-check in §8
+
+     The AD3 has two ±5 V arbitrary-waveform outputs and 16 DIO lines, so
+     0-5 V on W2 is comfortably inside the hardware range.
+
+     If your laser is driven from a DIO pin instead, set
+     LASER_BACKEND = 'pattern' and LASER_DIO_CHANNEL.  DigitalOut is a
+     physically separate instrument from AnalogOut, so pump updates cannot
+     reach it at all; the pump then takes Analog Out ch0.
+
+     LASER_BACKEND = 'external' tells Release 5.0 not to generate the laser
+     at all.  Use it only if something other than this AD3 is driving it.
+
+7.2  Exactly what is called
+
+     Once, at start-up:
+
+       FDwfEnum, FDwfDeviceOpen(device_index, &hdwf)
+       FDwfDeviceAutoConfigureSet(hdwf, 0)
+             AutoConfigure OFF, so no Set call silently reconfigures the
+             device.  Every hardware update is an explicit, channel-specific
+             Configure.
+
+       laser, on channel L:
+         FDwfAnalogOutNodeEnableSet   (hdwf, L, Carrier, 1)
+         FDwfAnalogOutNodeFunctionSet (hdwf, L, Carrier, funcSquare)
+         FDwfAnalogOutNodeFrequencySet(hdwf, L, Carrier, laser_frequency_hz)
+         FDwfAnalogOutNodeAmplitudeSet(hdwf, L, Carrier, laser_amplitude_v)
+         FDwfAnalogOutNodeOffsetSet   (hdwf, L, Carrier, laser_offset_v)
+         FDwfAnalogOutNodeSymmetrySet (hdwf, L, Carrier, laser_duty_percent)
+         FDwfAnalogOutRunSet          (hdwf, L, 0)      infinite
+         FDwfAnalogOutRepeatSet       (hdwf, L, 0)      infinite
+         FDwfAnalogOutIdleSet         (hdwf, L, ...)
+         FDwfAnalogOutConfigure       (hdwf, L, 1)      START this channel
+
+       pump, on channel P:
+         FDwfAnalogOutNodeEnableSet   (hdwf, P, Carrier, 1)
+         FDwfAnalogOutNodeFunctionSet (hdwf, P, Carrier, funcDC)
+         FDwfAnalogOutNodeAmplitudeSet(hdwf, P, Carrier, 0.0)
+         FDwfAnalogOutNodeOffsetSet   (hdwf, P, Carrier, startup_voltage)
+         FDwfAnalogOutRunSet          (hdwf, P, 0)
+         FDwfAnalogOutRepeatSet       (hdwf, P, 0)
+         FDwfAnalogOutConfigure       (hdwf, P, 1)      START this channel
+         FDwfAnalogOutConfigure       (hdwf, P, 3)      priming apply, see below
+
+     Per control step, and NOTHING else:
+
+         FDwfAnalogOutNodeOffsetSet   (hdwf, P, Carrier, V)
+         FDwfAnalogOutConfigure       (hdwf, P, 3)
+
+     fStart = 3 is documented in the WaveForms SDK reference manual as
+     "apply the configuration dynamically without changing the state of the
+     instrument".  The channel index is always explicit.
+
+     The pump channel uses funcDC with amplitude 0, so the output is entirely
+     determined by the node OFFSET; that is why a voltage change is a single
+     OffsetSet.
+
+7.3  What is deliberately NEVER done
+
+       * FDwfAnalogOutConfigure(hdwf, -1, ...)   -1 means "every enabled
+         Analog Out channel" and would address the laser.  Not used anywhere.
+       * FDwfAnalogOutReset / FDwfDeviceReset after start-up.
+       * Reopening or re-enumerating the device.  One handle for the session.
+       * Stopping or restarting the laser channel.  After start_laser()
+         returns, no function in ebiv_hardware.py addresses that channel
+         again, and the verification mode reports the count so you can check.
+
+7.4  The priming apply
+
+     A Digilent forum report ("AD3: first FDwfAnalogOutConfigure(ch, 3) glitch
+     observed after channel start") indicates that the FIRST dynamic apply
+     after a channel start can disturb the output.  Release 5.0 issues that
+     first apply during pump initialisation, at the startup voltage, before
+     any control action — so if the effect is real it lands at a harmless
+     moment rather than on the first control step.  Watch for it anyway in §8.
+
+7.5  Electrical notes, offered as cautions rather than advice
+
+     * The EcoDrift 4.3 auxiliary input accepts 0-10 V; we command only 0-5 V,
+       which is what the previous VKI setup used (an Arduino PWM pin, limited
+       to 5 V).  The AD3 gives a true DC level rather than a PWM average, so
+       there is no ripple for the pump input to filter.
+     * The AD3 output and the pump control input must share a ground
+       reference.  Check this before connecting anything.
+     * Verify the AD3's output drive is adequate for the pump input's load.
+       If in doubt, buffer it.
+     * This is water and mains-powered equipment. Ground loops and splashes
+       are your problem, not the software's.
+
+
+--------------------------------------------------------------------------------
+  8. HARDWARE VERIFICATION: DOES A PUMP UPDATE DISTURB THE LASER?
+--------------------------------------------------------------------------------
+
+Do this once, before any closed-loop run, after any change to the AD3 wiring
+or the WaveForms version.
+
+  1.  Close the WaveForms desktop application.
+  2.  In EBIV_Main.py set FLAG_VERIFY_HARDWARE = True and AD3_ENABLED = True.
+      Set the LASER_* parameters to your real laser settings.
+  3.  Put an oscilloscope on the laser output (W1, or the DIO pin).
+      Trigger on its rising edge.  Enable frequency, pulse-width and duty
+      measurements, and turn on trigger-stability / jitter measurement or
+      persistence display.
+  4.  Run:   python EBIV_Main.py
+      Press ENTER when the scope is stable.
+  5.  The routine steps the pump through 0, 1, 2, 3, 4, 5 V, holding each for
+      a few seconds and printing a banner at each step so you can correlate
+      the trace with the commanded voltage.
+  6.  At every step confirm on the SCOPE that these do not change:
+          - laser frequency
+          - pulse width
+          - duty cycle
+          - trigger stability / jitter (persistence should not smear)
+          - amplitude and offset
+      Also watch for any momentary dropout at the instant of the change.
+  7.  The routine then prints:
+          - the number of laser-channel configuration calls made during the
+            sweep.  This must be 0.
+          - the number of pump updates, failures, and the per-update time.
+          - a statement that the device was opened once and never reset.
+
+  Optional automated self-check.  Wire the laser output back into scope input
+  1+ and set use_internal_scope=True in the FLAG_VERIFY_HARDWARE call.  The
+  AD3 then digitises its own laser waveform before and after each pump change
+  and reports frequency drift in ppm, pulse-width drift in microseconds, duty
+  cycle and period jitter.  This is a convenient regression check, but be
+  clear about its limitation: the generator and the digitiser are in the same
+  device and share a reference clock, so it is blind to a common clock
+  disturbance and its jitter figure is a lower bound.  It does not replace the
+  external scope.
+
+  If anything DOES change: do not proceed to closed-loop operation.  Try
+  LASER_BACKEND = 'pattern', which moves the laser to the Pattern Generator —
+  a separate instrument from Analog Out, so an Analog Out apply cannot reach
+  it.  Then repeat this procedure.
+
+
+--------------------------------------------------------------------------------
+  9. MISSING OR BAD MEASUREMENTS
+--------------------------------------------------------------------------------
+
+A measurement is rejected when any of these is true:
+
+    - fewer than max(min_valid_vectors, min_valid_fraction * n_total) valid
+      vectors in the ControlROI;
+    - the value is NaN or Inf (checked twice: in the estimator and again in
+      the supervisor);
+    - the measurement is older than max_measurement_age_s;
+    - its sequence number has not advanced since the last control step, i.e.
+      no new field arrived (this is what catches a stalled camera or a stalled
+      PIV worker);
+    - the PIV worker raised, in which case it publishes an explicitly invalid
+      measurement rather than dying.
+
+Response, in order:
+
+    < hold_timeout_s          HOLD.  The last commanded voltage is maintained.
+                              The PID does not integrate and its derivative
+                              state is cleared, so no phantom error builds up
+                              against data that does not exist.  This covers
+                              the ordinary case of a few bad EBIV frames.
+
+    > safe_timeout_s          SAFE.  The pump is driven to safe_pump_voltage
+                              and the loop DISARMS.  Recovery requires an
+                              explicit operator re-arm, so a flapping
+                              measurement can never silently re-engage the
+                              controller.
+
+Every state change is logged once, at the transition, to both the console and
+<run>_events.csv.  Counters for valid / hold / stale / invalid / safe steps
+appear in the periodic summary and in the final report.
+
+On shutdown — normal quit, unhandled exception, or Ctrl-C — the pump is driven
+to safe_pump_voltage before the device is closed.  That path is in a `finally`
+block, so it runs even if the acquisition loop throws.
+
+
+--------------------------------------------------------------------------------
+  10. TIMING AND LATENCY INSTRUMENTATION
+--------------------------------------------------------------------------------
+
+Measured continuously, reported periodically (never per frame):
+
+    event_accumulation, frame_finalize, roi_crop, piv_queue_put
+    window_extraction, mean_subtract, fft_forward, cross_power,
+    fft_inverse, fftshift, peak_finding, subpixel, peak_quality_*
+    validation, magnitude_calc, control_roi_average
+    piv_field_total          full PIV worker turnaround
+    piv_input_age            frame finalised -> worker starts on it
+    control_step             one full controller update
+    control_interval         MEASURED interval between control steps
+    latency_frame_to_actuation
+                             newest contributing frame -> voltage applied
+    display_render, arrow_drawing, imshow_and_waitkey
+
+`LATENCY_REPORT_PERIOD_S` (default 10 s) sets the periodic summary; a full
+table with mean / p50 / p95 / max is printed at the end of every run and
+written to <run>_timing.csv.  The effective control rate is derived from the
+measured intervals, not from the nominal setting.
+
+Set FLAG_PROFILE = True for Release 4.0's per-stage profiler and its CSV as
+well; it keeps every sample, so use it for short diagnostic runs rather than
+long experiments.
+
+
+--------------------------------------------------------------------------------
+  11. LOGGING
+--------------------------------------------------------------------------------
+
+  <output_dir>/Control/<run_name>/
+      <run>_control.csv     one row per control step, written incrementally
+                            so a crash still leaves usable data and the run
+                            can be watched from another process
+      <run>_events.csv      state transitions and faults
+      <run>_config.json     the complete configuration
+      <run>_control.mat     the same columns as MATLAB arrays (scipy savemat,
+                            the format Release 4.0 already uses), plus the
+                            config, the timing summary and the counters
+      <run>_timing.csv      per-stage latency statistics
+      <run>_history.png     the strip chart at the end of the run
+
+  Columns: t_wall, t_rel, seq, state, u_target, u_raw, u_filtered, v_command,
+  error, p_term, i_term, d_term, u_unsaturated, saturated, slew_limited,
+  n_valid, n_total, valid_fraction, measurement_valid, measurement_age_ms,
+  latency_ms, dt_control_ms, invalid_reason.
+
+  The JSON header records both ROIs, the PID gains, the filter kind and
+  length, all rates, the safe voltage, the timeouts, the sensor size, the PIV
+  grid and the AD3 channel allocation — enough to reproduce the run.
+
+  RT-PIV field snapshots keep Release 4.0's .mat layout and add CC,
+  display_roi, control_roi and the field sequence number.
+
+
+--------------------------------------------------------------------------------
+  11b. WHAT THE LIVE WINDOWS SHOW
+--------------------------------------------------------------------------------
+
+Two windows, refreshed independently and neither able to affect control
+timing (visualization_rate_hz and plot_rate_hz).
+
+MAIN IMAGE WINDOW
+  * the pseudo-frame, or a black background with [b];
+  * velocity vectors over the DisplayROI, coloured by magnitude;
+  * the DisplayROI outline, labelled at its bottom-left;
+  * the ControlROI as a cyan rectangle with corner ticks, labelled at its
+    bottom-right, so what the controller is looking at is never in doubt;
+  * a status panel, top-left, on a translucent background so it stays
+    readable over the vector field:
+
+        [CLOSED_LOOP]              state, colour-coded
+        U_target      0.142 m/s    the set-point
+        U_ctrl_flt    0.140 m/s    what the PID is acting on
+        U_ctrl_raw    0.145 m/s    before the temporal filter
+        V_pump        2.317 V      what went to the pump
+        valid         52/56 (92.9%)  green above min_valid_fraction, amber below
+        ! reason                   only when the measurement is rejected
+
+STRIP CHART  ("EBIV Control — time history", toggle with [g])
+  Top pane, velocity: U_target (green), U_control_filtered (blue),
+  U_control_raw (faint red).  Bottom pane: the pump command.  Both panes have
+  gridlines with labelled ticks, and the latest value of each trace is printed
+  at the right-hand edge.
+
+  Three details that matter when reading it live:
+
+  * The pump pane AUTOSCALES to what the pump is actually doing, with the
+    configured limits shown in its title and a dashed line at the ceiling when
+    it is in view.  Pinned to the full 0-5 V range, a realistic 0.9-1.1 V
+    trace occupies 4% of the pane height and tells you nothing; autoscaled it
+    fills about two thirds of it.
+  * The velocity pane takes its limits from the 1st/99th percentile of the
+    raw trace but always shows the target and the filtered trace in full, so a
+    single bad frame cannot compress the plot and the set-point can never
+    scroll out of view.
+  * While the measurement is invalid the filtered trace HOLDS its last value —
+    correct behaviour, but it looks like live flow.  Those stretches are drawn
+    DIMMED, and the controller state is shown as a coloured band along the
+    bottom of the velocity pane (amber HOLD, red SAFE, grey MANUAL) and next
+    to the clock.  A held number never looks like a measured one.
+
+  In manual and calibration mode there is no set-point, so the target trace is
+  absent and the chart shows the measured velocity against the commanded
+  voltage — which is exactly the picture you want while stepping the pump to
+  build the V -> U curve.
+
+
+--------------------------------------------------------------------------------
+  12. PARAMETER REFERENCE (new in Release 5.0)
+--------------------------------------------------------------------------------
+
+  ROIs and image orientation
+    DISPLAY_ROI                 [x0,x1,y0,y1] or None. Where PIV runs.
+    CONTROL_ROI                 [x0,x1,y0,y1]. Must be inside DISPLAY_ROI.
+    FLAG_FLIP_X                 mirror the frame left-right. Negates U, and
+                                puts both ROIs in flipped-image coordinates
+    FLAG_FLIP_Y                 mirror the frame top-bottom. Negates V, same
+                                ROI consequence
+                                (for a pure sign change prefer
+                                 CONTROL_COMPONENT; see §3)
+
+  Feedback quantity
+    CONTROL_COMPONENT           'u' | '-u' | 'v' | '-v' | 'magnitude'
+    CONTROL_STATISTIC           'mean' | 'median'
+    MIN_VALID_FRACTION          fraction of ControlROI nodes required
+    MIN_VALID_VECTORS           absolute floor on the same
+    USE_CORRELATION_GATE        reject vectors by correlation quality
+    MIN_CORRELATION             threshold for that gate
+    MAX_ABS_DISPLACEMENT_PX     reject implausible vectors; None disables
+    CALIBRATION_PX_PER_MM       optical resolution, px/mm. Set it and the
+                                whole loop works in m/s. None = px/frame
+    PULSE_SEPARATION_S          dt between correlated frames, seconds.
+                                None derives it as 1/f_acq (= 1/f_laser when
+                                the laser fires once per pseudo-frame)
+    VELOCITY_SCALE              low-level px/frame -> display-unit factor,
+                                used only when CALIBRATION_PX_PER_MM is None
+    VELOCITY_UNITS              label; set automatically to 'm/s' when a
+                                px/mm calibration is given
+
+  Temporal filter
+    FILTER_KIND                 'none' | 'ma' | 'ema'
+    FILTER_WINDOW               moving-average length, samples
+    FILTER_TAU_S                EMA time constant, seconds
+
+  Reference
+    REFERENCE_KIND              constant | live | step | sine | file | random
+    REFERENCE_VALUE             base level ('live': the starting target)
+    REF_LIVE_STEP               'live': how much one [+]/[-] press moves the
+                                target, in display units
+    REF_LIVE_MIN                'live': lowest target the operator can ask for
+                                (None = unbounded)
+    REF_LIVE_MAX                'live': highest target (None = unbounded).
+                                Worth setting once you know the pump's reach.
+    REF_STEP_TIME_S             step time, seconds after arming
+    REF_STEP_AMPLITUDE          step size
+    REF_SINE_AMPLITUDE          sine amplitude
+    REF_SINE_FREQ_HZ            sine frequency
+    REF_FILEPATH                two-column (time_s, target) csv/txt/npy
+    REF_RANDOM_SEED             reproducibility
+    REF_RANDOM_STD              standard deviation about REFERENCE_VALUE
+    REF_RANDOM_CUTOFF_HZ        bandwidth of the random reference
+
+  PID
+    PID_KP, PID_KI, PID_KD      V per (velocity unit), and its integrals
+    PID_V_MIN, PID_V_MAX        output saturation
+    PID_SLEW_V_PER_S            slew-rate limit; None disables
+    PID_D_ON_MEASUREMENT        True avoids set-point kick
+    PID_D_FILTER_TAU_S          derivative filter; 0 disables
+    PID_ANTI_WINDUP             'clamp' | 'back_calc' | 'none'
+    PID_INTEGRAL_LIMIT          hard bound on the integral term; None disables
+
+  Rates and safety
+    CONTROL_RATE_HZ             controller rate, independent of EBIV
+    VISUALIZATION_RATE_HZ       image window refresh
+    PLOT_RATE_HZ                strip-chart refresh
+    HOLD_TIMEOUT_S              dropout tolerated by holding the output
+    SAFE_TIMEOUT_S              dropout after which SAFE is entered
+    MAX_MEASUREMENT_AGE_S       staleness threshold
+    SAFE_PUMP_VOLTAGE           the configured safe state (NOT assumed 0 V)
+    STARTUP_PUMP_VOLTAGE        applied when the pump output is first enabled
+
+  Analog Discovery
+    AD3_ENABLED                 False -> MockPump, no hardware touched
+    LASER_BACKEND               'analog' | 'pattern' | 'external'
+    LASER_CHANNEL               analog-out index for the laser
+    LASER_DIO_CHANNEL           DIO index when backend='pattern'
+    LASER_FREQUENCY_HZ          laser pulse rate; match f_acq
+    LASER_AMPLITUDE_V           square-wave amplitude (half peak-to-peak)
+    LASER_OFFSET_V              square-wave offset
+    LASER_DUTY_PERCENT          pulse width as % of the period
+    PUMP_CHANNEL                analog-out index for the pump
+    PUMP_V_MIN, PUMP_V_MAX      hardware-enforced limits, clamped again in
+                                the backend
+
+  Calibration
+    CAL_MODE                    'manual' | 'steps' | 'sweep'
+    CAL_VOLTAGES                the step ladder
+    CAL_DWELL_S                 hold time per step
+    CAL_SETTLE_S                discarded head of each dwell
+    CAL_SWEEP_START/STOP        ramp limits
+    CAL_SWEEP_DURATION_S        ramp duration
+    CAL_SWEEP_RETURN            ramp back down to expose hysteresis
+    CAL_MANUAL_STEP_V           [+]/[-] increment
+
+  Logging
+    LOG_ENABLED, LOG_FORMATS, LOG_FLUSH_EVERY, LATENCY_REPORT_PERIOD_S
+
+  PIV engine
+    PIV_WINDOW_SIZE             interrogation window, px
+    PIV_NODE_DISTANCE           grid spacing, px
+    PIV_TRIPLE_CORR             3-frame correlation
+    PIV_FFT_WORKERS             scipy.fft threads; 1 == Release 4.0
+    PIV_SUBPIXEL                True = sub-pixel; False = R4 integer output
+    PIV_COMPUTE_QUALITY         needed by the correlation gate
+    PIV_FAST_MEAN_REMOVAL       faster, NOT bit-exact; see AUDIT §3
+    PIV_VALIDATION              Westerweel-Scarano on/off
+    PIV_VAL_THRESHOLD           its threshold
+    PIV_VAL_EPSILON             its epsilon
+
+
+--------------------------------------------------------------------------------
+  13. TESTING
+--------------------------------------------------------------------------------
+
+  cd tools && python test_release5.py
+                                 149 unit + 48 hardware-sequence + 23
+                                 integration checks, all passing, no
+                                 hardware:
+
+    1  EBIV equivalence: window extraction, 2- and 3-frame correlation and the
+       sub-pixel estimator are all bit-identical to Release 4.0 on the same
+       input; fft_workers>1 changes nothing; sub-pixel measurably reduces the
+       displacement error; the Release 4.0 degenerate-plane failure is
+       reproduced and shown to be caught by the new correlation gate.
+    2  ControlROI: node selection, every component, scaling, NaN exclusion,
+       insufficient-vector rejection, the correlation gate, the displacement
+       limit, and refusal of a ControlROI outside the DisplayROI.
+    3  Filters: MA arithmetic, EMA step response to 1-1/e at tau, rate
+       independence, the measured group delay of a length-21 MA, refusal of
+       non-finite input.
+    4  PID: P/I arithmetic, both saturation limits, clamp and back-calculation
+       anti-windup (with a no-anti-windup control case that DOES wind up),
+       slew limiting, derivative-on-measurement removing set-point kick,
+       derivative filtering attenuating noise, bumpless transfer, dt clamping,
+       and 4000 adversarial steps that never leave [v_min, v_max].
+    5  Invalid measurements: HOLD freezes the output, recovery returns to
+       CLOSED_LOOP, a long dropout escalates to SAFE, SAFE latches, NaN/Inf
+       never produce a NaN command, stale-but-valid is rejected on age, and a
+       frozen sequence number is treated as no new data.
+    6  Reference generators: all five kinds, seed reproducibility, band
+       limiting demonstrated against white noise, clipping, and a check that
+       the generators do not reference the PID.
+    7  Closed loop against the simulated plant: the plant is confirmed
+       non-linear; step and sine tracking; a zero-gain control run showing the
+       tracking is due to feedback; noise plus dropouts; a long dropout
+       reaching SAFE; an unreachable set-point saturating without windup.
+    8  Hardware abstraction: mock pump limits, channel-clash refusal, config
+       cross-checks, the laser pulse-metric function, and a check that the
+       control law does not import the hardware layer.
+    9  Config validation and the logger's five output files.
+   10  Visualisation renders, tolerates NaN, and is fast.
+   11  Session and GUI: preset round-trip and tolerance of unknown keys,
+       the directory layout, the offline chain running the right steps in the
+       right order, streaming dispatch, and that EBIV_Main hands the GUI a
+       valid session.
+   12  Analog Discovery call sequence (test_hardware_mock.py): the real
+       AnalogDiscovery3 and AnalogOutPump are run against a fake WaveForms
+       runtime that records every ctypes call, and the recording is asserted
+       against the design claims — device opened once, AutoConfigure off, the
+       laser channel never addressed after start-up (checked across 200 pump
+       updates and a closed-loop run), idxChannel never -1, no reset, each
+       pump update exactly OffsetSet + Configure(ch, 3), limits enforced
+       before the DAC, the DIO backend touching DigitalOut only, and every
+       failure path raising AD3Error rather than passing silently.
+   13  Integration (test_integration.py): the REAL stream_camera() is run
+       against a synthetic event stream carrying particles that translate by
+       a known 4.0 px/frame.  It checks that the ControlROI velocity recovers
+       that displacement end-to-end through the whole pipeline (measured
+       +4.001 px/frame), that [c] arms the loop, that the control thread holds
+       its configured rate, that latency is recorded, that all five log files
+       are written, that the pump command stays in range, that the run ends at
+       the configured safe voltage, and that no worker threads survive
+       shutdown.
+
+  python simulate_control.py     five closed-loop scenarios against the
+                                 simulated plant, with figures.
+
+  python bench_release5.py       R4 vs R5 CPU benchmark on your machine,
+                                 with a bit-exactness check.
+
+  python test_integration.py     the integration test on its own.
+  python test_gui.py             31 GUI checks: parameter binding, tab
+                                 visibility per mode, widget round-trip for
+                                 every widget kind, rejection of bad and
+                                 half-filled input, preset round-trip.
+                                 Needs tkinter; works under xvfb-run.
+
+  python test_hardware_mock.py   the Analog Discovery call-sequence checks on
+                                 their own.
+
+  Hardware validation is §8 and is deliberately manual.  test_hardware_mock.py
+  proves the software ASKS for the right thing; only the oscilloscope proves
+  the hardware DOES the right thing.
+
+
+--------------------------------------------------------------------------------
+  14. KNOWN LIMITATIONS AND NEXT STEPS
+--------------------------------------------------------------------------------
+
+Limitations
+
+  * No gains are supplied.  PID_KP/KI/KD ship at zero because there is no
+    calibration yet and inventing gains would be worse than useless.
+  * The pump/jet model in simulate_control.py is a toy.  It is non-linear on
+    purpose, but it is not the EcoDrift 4.3.
+  * Performance numbers in AUDIT_R4_to_R5.md come from a shared 2-core cloud
+    container and vary by up to 50% between runs there.  The per-stage gains
+    (2-4x on window extraction and cross-power) are structural and should
+    hold; the end-to-end figure depends on your ROI and memory bandwidth.
+  * Laser/pump independence is argued from the SDK semantics and the code
+    structure, and is NOT yet demonstrated on this hardware.  §8 is how you
+    demonstrate it.
+  * The GPU backend is unused and carries two unfixed bugs (B7, B8).  Do not
+    enable it.
+  * The controller acts on one scalar.  No spatial or multi-input control.
+  * The camera's own trigger path is unchanged from Release 4.0: Release 5.0
+    generates the laser waveform but does not close the loop between the
+    generated waveform and the camera's trigger-in.  If you want hardware
+    phase locking rather than 'auto' phase detection, wire the AD3 laser
+    signal to the camera trigger input and use trigger_mode='external'.
+  * Threading, not multiprocessing.  Justified by measurement (the FFT
+    releases the GIL) but it does mean a single CPython process.
+  * The strip chart is deliberately simple. It is not a substitute for
+    analysing the logged CSV afterwards.
+
+Recommended next steps, in order
+
+  1.  §8 hardware verification with a scope. Do not skip it.
+  2.  RUN_MODE='calibration', CAL_MODE='steps', over the range you intend to
+      use.  Extract the static curve V -> U_control and the step response.
+      Expect a dead-band at low voltage and a non-linear curve.
+  3.  From the step response take the apparent time constant tau and delay L.
+      Choose CONTROL_RATE_HZ around 10-20x the closed-loop bandwidth you
+      expect, not around the camera rate.  Set FILTER_TAU_S well below tau so
+      the filter is not the dominant lag.
+  4.  Tune Kp first with Ki = Kd = 0 at a mid-range operating point.  Add Ki
+      to remove steady-state error.  Add Kd only if the derivative is not
+      dominated by measurement noise — check the d_term column in the log.
+      Because the plant is non-linear, gains tuned at one operating point will
+      not be optimal at another; consider gain scheduling on V, or inverting
+      the measured static curve as a feed-forward term and letting the PID
+      handle only the residual.
+  5.  Verify HOLD and SAFE on the real rig before a long run: block the laser
+      briefly, and confirm the controller holds and then goes safe.
+  6.  Only then consider GPU acceleration, and fix B7/B8 first.
+
+
+================================================================================
+  Author: L. Franceschelli, UC3M
+  Contact: lfrances@ing.uc3m.es
+================================================================================

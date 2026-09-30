@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+# local settings and data
+VibeStream_last_settings.json
+*.raw
+*.tif
+*.npz
+*.mat
+Out/
+RawImg/
+Raw/
+desktop.ini

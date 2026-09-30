@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use VIBEstream, please cite the paper below."
+title: "VIBEstream: real-time event-based imaging velocimetry with resolution enhancement"
+version: 1.0.0
+license: MIT
+repository-code: "https://github.com/LFranceschelli/VIBEstream"
+authors:
+  - family-names: Franceschelli
+    given-names: Luca
+    affiliation: "Universidad Carlos III de Madrid"
+preferred-citation:
+  type: article
+  title: "Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry"
+  authors:
+    - family-names: Franceschelli
+      given-names: L.
+    - family-names: Amico
+      given-names: E.
+    - family-names: Willert
+      given-names: C. E.
+    - family-names: Raiola
+      given-names: M.
+    - family-names: Cafiero
+      given-names: G.
+    - family-names: Discetti
+      given-names: S.
+  journal: "Experiments in Fluids"
+  year: 2026
+  # doi: add when assigned
