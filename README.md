@@ -12,7 +12,7 @@ This is an educational reference implementation, written to be read and extended
 > *Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry*, Experiments in Fluids (2026, accepted). DOI: to be assigned.
 > Data: [Zenodo](https://zenodo.org/records/20037404)
 
-<p align="center"><img src="docs/media/live_stream.gif" width="600" alt="live rt-EBIV stream"></p>
+https://github.com/user-attachments/assets/ee397704-37f4-475f-b815-36d7e022fa2e
 
 ## Installation
 
