@@ -14,6 +14,8 @@ This is an educational reference implementation, written to be read and extended
 
 https://github.com/user-attachments/assets/ee397704-37f4-475f-b815-36d7e022fa2e
 
+*Closed-loop control of a water jet.* VIBEstream measures the velocity field of the jet in real time. The control ROI (yellow box) is centred on the jet core, and the core velocity estimated there is the feedback signal: a PID controller sets the voltage of the pump's power supply so that the core velocity chases a user-set target. Top plot: estimated core velocity, with the target in green. Bottom plot: voltage supplied to the pump.
+
 ## Installation
 
 1. **Camera driver.** Install the **Metavision SDK** or **OpenEB** before anything else. It is not on PyPI, so follow [Prophesee's instructions](https://docs.prophesee.ai/stable/installation/index.html). VIBEstream must run on a Python version your SDK release supports (5.x: Python 3.10–3.12; 4.6: Python 3.9).
