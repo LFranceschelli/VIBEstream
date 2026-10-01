@@ -1,8 +1,14 @@
-<p align="center"><img src="assets/logo_256.png" width="140" alt="VIBEstream logo"></p>
+<p align="center">
+  <img src="assets/logo_256.png" height="120" align="middle" alt="VIBEstream logo">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/vibe_banner.webp" height="220" align="middle" alt="EBIV read backwards is VIBE">
+</p>
 
 # VIBEstream
 
 **Real-time event-based imaging velocimetry (rt-EBIV) with live resolution enhancement.**
+
+**Why VIBE?** Read *EBIV*, event-based imaging velocimetry, backwards. `VIBE` is the Python class at the core of the package; VIBEstream is everything built around it: live streaming, the GUI, feedback control and the resolution enhancement.
 
 VIBEstream drives a Prophesee-sensor event camera from Python. With it you can record `.raw` event streams and pseudo-images, monitor the scene live, run quick PIV, and get velocity fields in real time for lab experiments and control loops. It also includes the three high-resolution estimators of the paper below (Kalman filter, LSE + KF, LSE with variance rescaling + KF). They turn the coarse live field into an estimate of the high-resolution field, in a reduced POD basis.
 
