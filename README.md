@@ -103,8 +103,8 @@ docs/MANUAL.txt                detailed manual (timing, ROIs, control loop, hard
 ## References
 
 - L. Franceschelli, E. Amico, C. E. Willert, M. Raiola, G. Cafiero, S. Discetti, *Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry*, Experiments in Fluids (2026, accepted). DOI: to be assigned. **The paper this software accompanies**: the real-time EBIV pipeline and the three high-resolution estimators. Data: [Zenodo](https://zenodo.org/records/20037404).
-- C. E. Willert, *Event-based imaging velocimetry using pulsed illumination*, Experiments in Fluids 64, 98 (2023). https://doi.org/10.1007/s00348-023-03641-8. The pulsed-EBIV principle that VIBEstream implements.
 - L. Franceschelli, C. E. Willert, M. Raiola, S. Discetti, *An assessment of event-based imaging velocimetry for efficient estimation of low-dimensional coordinates in turbulent flows*, Experimental Thermal and Fluid Science 164, 111425 (2025). https://doi.org/10.1016/j.expthermflusci.2025.111425. EBIV compared with PIV for estimating reduced-order coordinates; source of the channel-flow dataset.
+- C. E. Willert, *Event-based imaging velocimetry using pulsed illumination*, Experiments in Fluids 64, 98 (2023). https://doi.org/10.1007/s00348-023-03641-8. The pulsed-EBIV principle that VIBEstream implements.
 
 ## Citation, license, contact
 
