@@ -13,7 +13,7 @@
 VIBEstream is for anyone who has just connected a Prophesee-sensor event camera to a PC and wants to get flow measurements out of it, without first writing their own acquisition and processing code. One parameter window, or one class for your own scripts, covers the whole path from the sensor to velocity fields:
 
 - **Live.** Stream the scene, set the acquisition (rate, laser trigger, accumulation window, ROI) and the PIV settings, and see velocity vectors computed in real time on the pseudo-frames. Adjust and restart until the measurement looks right. The live velocity field can also drive a control loop.
-- **Offline.** Follow the offline chain step by step: record a `.raw` event file, play it back, generate phase-locked pseudo-images, and process them with a PIV-like multi-pass (pyramidal) correlation. Each step is a tick box in the window and the selected steps run in order. Raw files, images and velocity fields land in a fixed folder structure.
+- **Offline.** Follow the offline chain step by step: record a `.raw` event file, play it back, generate pseudo-images, and process them with a PIV-like multi-pass (pyramidal) correlation. Each step is a tick box in the window and the selected steps run in order. Raw files, images and velocity fields land in a fixed folder structure.
 - **Resolution enhancement.** It includes the three estimators of the paper below: Kalman filter, LSE + KF, and LSE with variance rescaling + KF. Trained offline, they turn the coarse real-time field into an estimate of the high-resolution field, live.
 
 This is an educational reference implementation, written to be read and extended. The faster C++ version is not part of this release.
