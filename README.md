@@ -49,7 +49,7 @@ If the camera is not found, run `python tools/check_env.py`, then read `docs/MAN
    - **Live streaming**, with a sub-mode: EBIV only, manual pump control, calibration, or closed loop.
    - **Offline chain**, with the steps you want ticked: *record .raw → play back → generate frames → offline PIV* (and *train HR model*).
 2. Set the parameters on the tabs: acquisition, PIV and ROIs, offline, display. Hovering a label shows what it does, and *Validate* checks the whole configuration before anything touches the camera.
-3. Press *Run*. The live stream opens its own window with the pseudo-frames and the vectors. Offline steps write to `Raw/`, `RawImg/<name>/` and `Out/<name>/` under the output folder.
+3. Press *Run*. The live stream opens its own window with the pseudo-frames. In *EBIV only* mode the real-time PIV starts switched off: press **[p]** in that window to start the vectors and **[q]** to quit (all keys: `docs/MANUAL.txt`, §6.6). In the control modes, and with the resolution enhancement on, the PIV runs from the start. Offline steps write to `Raw/`, `RawImg/<name>/` and `Out/<name>/` under the output folder.
 4. Save the settings as a preset (*File → Save preset*) to repeat the experiment later. The last settings are restored automatically.
 
 No camera yet? Every offline step after *record* works on any `.raw` file, for example the recordings in the [Zenodo dataset](https://zenodo.org/records/20037404). The Metavision SDK or OpenEB is still needed to read the file.
@@ -69,6 +69,27 @@ with VIBE(roi=[200, 1100, 150, 600]) as vibe:
 
 The class also offers a background stream for control loops (`start`, `latest`, `stop`), offline PIV on `.raw` files, and Analog Discovery control (`laser_on`, `set_voltage`, `pid`).
 
+## GPU correlation (optional)
+
+The cross-correlation can run on an NVIDIA GPU (PyTorch + CUDA), both in the application and in the class:
+
+| | |
+|---|---|
+| **Application** | tick *GPU correlation (torch + CUDA)* on the *PIV & ROIs* tab, or set `PIV_USE_GPU = True` in `EBIV_Main.py`. It is used by the live stream and by the offline pyramidal PIV. |
+| **`VIBE` class** | `gpu=True` in `velocity()`, `start()`, `piv()` and `piv_offline()` |
+
+- **Install:** get the PyTorch build for your CUDA version from [pytorch.org](https://pytorch.org). A plain `pip install torch` is often CPU-only. If torch or CUDA is missing, VIBEstream says so in the log and continues on the CPU.
+- **Same results as the CPU:**
+  - The GPU backend returns the same sub-pixel displacements and correlation quality as the CPU backend, agreeing to about 1e-6 px in the tests.
+  - One exception: on binary pseudo-images without smoothing, a window whose correlation plane has two equal highest peaks may resolve to a different peak on each backend. The 0.75 px Gaussian smoothing used in the paper removes these ties.
+- **What it buys:** throughput on large grids, because all the windows of a snapshot are correlated in one batch.
+  - The delay from events to vector, which matters for a control loop, has not been benchmarked: compare a CPU and a GPU run before relying on the GPU for control.
+  - The offline GPU PIV does not compute the correlation quality (saved as NaN).
+  - Training the resolution enhancement (multi-frame HR PIV) always runs on the CPU.
+- **Check it on your machine:**
+  - `python tools/check_gpu.py` runs the offline PIV on both backends on synthetic images and compares them.
+  - `python tools/test_gpu_paths.py` checks the application and class paths. It needs torch, not CUDA.
+
 ## Resolution enhancement
 
 The model (POD bases + operators) can come from three places. You choose in **Resolution enhancement → Train a model…**, or with the flags in `HR_Example.py`:
@@ -87,6 +108,7 @@ For external data, the LR grid of the files must match the live grid. That match
 
 - **Developed and used on:** Windows 10/11; OpenEB 5.2 and 4.6; IDS uEye EVS and Prophesee EVK4 cameras (Sony IMX636 sensor); Analog Discovery 3 for the laser trigger and pump. Other IMX636 cameras with a Metavision HAL plugin should work, but are untested.
 - **Automated test suites** (`tools/test_*.py`, fake camera and mocked hardware): Linux, Python 3.12. The CI runs a subset on each push.
+- **GPU backend:** `tools/check_gpu.py` passes on an NVIDIA GeForce RTX 3060 Laptop GPU (CUDA 12.4, PyTorch 2.6, Python 3.9): the offline PIV gives identical vectors on GPU and CPU. The live-stream and class paths were checked against the CPU on PyTorch CPU tensors. On another GPU, run `tools/check_gpu.py` once.
 - **Anything else is untested:** other sensors, macOS, other SDK versions.
 
 ## Repository layout

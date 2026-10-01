@@ -797,8 +797,10 @@ class PIVConfig:
         B7, B8) and could not complete a single snapshot; both are fixed in
         Release 5.2.  CC is NOT computed on this path and is written as NaN.
 
-        All of the above was verified on CPU tensors, since the machine that
-        wrote it has no CUDA.  Run tools/check_gpu.py on YOUR machine once.
+        Verified against the CPU on CPU tensors (tools/test_release5.py,
+        tools/test_gpu_paths.py) and on CUDA with tools/check_gpu.py (RTX 3060
+        Laptop GPU, CUDA 12.4, torch 2.6).  Run tools/check_gpu.py once on a
+        new machine.
     """
     window_size: int = 48
     node_distance: int = 24

@@ -2036,11 +2036,10 @@ def process_offline_piv(input_dir, output_dir, window_size=64, node_distance=32,
                 "this kernel and will be saved as NaN. Anything downstream "
                 "that filters on CC must use the CPU path.")
             logging.warning(
-                "GPU pyramidal PIV: the homothetic scaling was wrong in "
-                "Release 4.0 (audit B7/B8) and is fixed in 5.2, but the fix "
-                "was verified on CPU tensors, not on CUDA. Run "
-                "tools/check_gpu.py on this machine once before trusting "
-                "these vectors.")
+                "GPU pyramidal PIV: agreement with the CPU path was verified "
+                "on CUDA (RTX 3060 Laptop, CUDA 12.4, torch 2.6). On a new "
+                "machine or driver, run tools/check_gpu.py once before "
+                "trusting these vectors.")
         except Exception as e:
             logging.warning(f"GPU init failed, falling back to CPU: {e}")
             gpu_corr = None
