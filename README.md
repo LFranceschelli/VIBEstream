@@ -8,9 +8,13 @@
 
 **Real-time event-based imaging velocimetry (rt-EBIV) with live resolution enhancement.**
 
-**Why VIBE?** Read *EBIV*, event-based imaging velocimetry, backwards. `VIBE` is the Python class at the core of the package; VIBEstream is everything built around it: live streaming, the GUI, feedback control and the resolution enhancement.
+**Why VIBE?** Read *EBIV*, event-based imaging velocimetry, backwards. `VIBE` is the Python class at the core of the package; VIBEstream is everything built around it: live streaming, the offline chain, the GUI, feedback control and the resolution enhancement.
 
-VIBEstream drives a Prophesee-sensor event camera from Python. With it you can record `.raw` event streams and pseudo-images, monitor the scene live, run quick PIV, and get velocity fields in real time for lab experiments and control loops. It also includes the three high-resolution estimators of the paper below (Kalman filter, LSE + KF, LSE with variance rescaling + KF). They turn the coarse live field into an estimate of the high-resolution field, in a reduced POD basis.
+VIBEstream is for anyone who has just connected a Prophesee-sensor event camera to a PC and wants to get flow measurements out of it, without first writing their own acquisition and processing code. One parameter window, or one class for your own scripts, covers the whole path from the sensor to velocity fields:
+
+- **Live.** Stream the scene, set the acquisition (rate, laser trigger, accumulation window, ROI) and the PIV settings, and see velocity vectors computed in real time on the pseudo-frames. Adjust and restart until the measurement looks right. The live velocity field can also drive a control loop.
+- **Offline.** Follow the offline chain step by step: record a `.raw` event file, play it back, generate phase-locked pseudo-images, and process them with a PIV-like multi-pass (pyramidal) correlation. Each step is a tick box in the window and the selected steps run in order. Raw files, images and velocity fields land in a fixed folder structure.
+- **Resolution enhancement.** It includes the three estimators of the paper below: Kalman filter, LSE + KF, and LSE with variance rescaling + KF. Trained offline, they turn the coarse real-time field into an estimate of the high-resolution field, live.
 
 This is an educational reference implementation, written to be read and extended. The faster C++ version is not part of this release.
 
@@ -37,14 +41,20 @@ The script creates a virtual environment `.venv` in this folder. It then runs `p
 
 If the camera is not found, run `python tools/check_env.py`, then read `docs/MANUAL.txt` (DLL/plugin issues on Windows).
 
-## Two ways to use it
+## Getting started
 
-**VibeStream, the application.** Double-click `VibeStream.bat`, or run `vibestream` inside the environment. The parameter window offers:
-- live streaming (EBIV, manual/open-loop, calibration, closed loop);
-- an offline chain: record → play back → phase-locked frames → pyramidal PIV;
-- the **Resolution enhancement** panel and menu (train or import a model, then estimate live).
+**VibeStream, the application.** Double-click `VibeStream.bat`, or run `vibestream` inside the environment. In the window you:
 
-You can also skip the window: set the flags at the top of `EBIV_Main.py` and run it.
+1. Choose what to run:
+   - **Live streaming**, with a sub-mode: EBIV only, manual pump control, calibration, or closed loop.
+   - **Offline chain**, with the steps you want ticked: *record .raw → play back → generate frames → offline PIV* (and *train HR model*).
+2. Set the parameters on the tabs: acquisition, PIV and ROIs, offline, display. Hovering a label shows what it does, and *Validate* checks the whole configuration before anything touches the camera.
+3. Press *Run*. The live stream opens its own window with the pseudo-frames and the vectors. Offline steps write to `Raw/`, `RawImg/<name>/` and `Out/<name>/` under the output folder.
+4. Save the settings as a preset (*File → Save preset*) to repeat the experiment later. The last settings are restored automatically.
+
+No camera yet? Every offline step after *record* works on any `.raw` file, for example the recordings in the [Zenodo dataset](https://zenodo.org/records/20037404). The Metavision SDK or OpenEB is still needed to read the file.
+
+To run without the window, set the flags at the top of `EBIV_Main.py` and run that script.
 
 **The `VIBE` class, for your own scripts** (see `VIBE_Example.py`):
 
