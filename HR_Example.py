@@ -102,7 +102,7 @@ RECONSTRUCT_FIELD = True  # False: latent state only
 #  3. RUN
 # =============================================================================
 LIVE = dict(f_hz=F_ACQ, roi=ROI, window=WINDOW, step=STEP, flip_x=False, flip_y=False,
-            phase_locked=True)
+            pulse_frames=True)
 
 
 def train_and_save(ds):

@@ -1629,7 +1629,7 @@ def generate_centered_images(raw_file_path, output_dir, f_acq, Nimg, prefix="fra
                              burst_search_max_sec=1.0, roi=None, duty_cycle=0.8,
                              prof=_NULL_PROF, flip_x=False, flip_y=False, flip_state=None):
     """
-    Generates phase-locked event frames from a .raw recording.
+    Generates event pseudo-images from a .raw recording, one per laser pulse.
 
     duty_cycle (0..1): fraction of the inter-pulse period to accumulate,
         centered on the detected laser burst peak.

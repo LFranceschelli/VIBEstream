@@ -98,7 +98,7 @@ from ebiv_config import (Session, RunConfig,
 FLAG_STREAM       = True    # live camera.  Uses STREAM_MODE below.
 FLAG_RECORD       = False   # record events from the camera to a .raw file
 FLAG_PLAYBACK     = False   # replay that .raw file so you can look at it
-FLAG_IMAGE_GEN    = False   # .raw  ->  phase-locked .tif frames
+FLAG_IMAGE_GEN    = False   # .raw  ->  .tif pseudo-images, one per laser pulse
 FLAG_PIV_PROCESS  = False   # offline pyramidal PIV on those .tif frames
 
 # FLAG_STREAM is exclusive: it runs the live camera and nothing else.

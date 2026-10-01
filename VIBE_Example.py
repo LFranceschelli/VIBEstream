@@ -28,7 +28,7 @@ FLAG_RECORD      = False   # record T seconds of raw events
 FLAG_LIVE        = True    # live velocity fields in a for-loop (print + window)
 FLAG_BACKGROUND  = False   # rt-EBIV in the background, your loop reads latest()
 FLAG_CLOSED_LOOP = False   # PID on the pump from a ROI-averaged velocity
-FLAG_OFFLINE     = False   # .raw -> phase-locked frames -> PIV
+FLAG_OFFLINE     = False   # .raw -> pseudo-images (one per laser pulse) -> PIV
 
 AD3_MOCK = True            # True: no Analog Discovery touched (dry run). False: real device.
 

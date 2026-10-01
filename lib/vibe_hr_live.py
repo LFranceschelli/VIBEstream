@@ -195,4 +195,4 @@ def live_settings_from_session(session):
                 flip_x=bool(run.flip_x), flip_y=bool(run.flip_y),
                 max_events_per_pixel=int(run.max_events_per_pixel),
                 smooth_sigma=(float(run.frame_smooth_sigma) if run.frame_smooth_sigma else None),
-                phase_locked=run.trigger_mode != 'none')
+                pulse_frames=run.trigger_mode != 'none')

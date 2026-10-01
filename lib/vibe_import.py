@@ -239,7 +239,7 @@ def _hr_display_settings(Xp, Yp):
 
 def declared_processing(live_settings, f_hz):
     """The LR-processing record an imported model is stamped with."""
-    keys = ('roi', 'window', 'step', 'flip_x', 'flip_y', 'phase_locked')
+    keys = ('roi', 'window', 'step', 'flip_x', 'flip_y', 'pulse_frames')
     rec = {k: live_settings[k] for k in keys if k in live_settings}
     rec['f_hz'] = float(f_hz)
     return rec

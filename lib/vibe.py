@@ -289,7 +289,7 @@ class _FrameBuilder:
                 return frames
             self.center = self.triggers[-1]
 
-        # --- phase-locked windows -----------------------------------------
+        # --- accumulation windows centred on the laser pulses ---------------
         # The stream paused (no light, nothing arrived): jump by whole periods.
         # The phase is unchanged; only the counter was stale.
         if t0 - (self.center + self.half) > self.period:
@@ -559,7 +559,7 @@ class VIBE:
                timestamps), not the PC clock.  None = until stop() (needs
                block=False).
         f      laser / acquisition frequency in Hz.  Stored in the metadata
-               for later phase-locked frame generation.  Event cameras have no
+               for the later pseudo-image generation (one per pulse).  Event cameras have no
                frame rate: f does not down-sample anything.  If VIBE is
                already driving the laser (laser_on()), it is retuned to f;
                a laser that is off is never switched on implicitly.
@@ -1045,7 +1045,7 @@ class VIBE:
     def frames_from_raw(self, raw_path, f=None, n=None, duty_cycle=0.8, roi=None,
                         normalize='max', gaussian=None, phase_us=None, search_s=1.0):
         """
-        Phase-locked pseudo-frames from a .raw file (generator of Frame).
+        Pseudo-frames from a .raw file, one per laser pulse (generator of Frame).
 
         Same algorithm as ebiv_utils.generate_centered_images (phase from a
         phase-folded histogram of the first `search_s`, windows of
@@ -1086,7 +1086,7 @@ class VIBE:
 
     def save_frames(self, raw_path, out_dir, f=None, n=100, duty_cycle=0.8, roi=None,
                     gaussian=None, prefix="frame_"):
-        """Write phase-locked .tif frames (as FLAG_IMAGE_GEN).  Returns the paths."""
+        """Write .tif pseudo-images, one per laser pulse (as FLAG_IMAGE_GEN).  Returns the paths."""
         import cv2
         out_dir = self._path(out_dir)
         os.makedirs(out_dir, exist_ok=True)

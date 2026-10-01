@@ -41,7 +41,7 @@ def check(name, cond, detail=""):
 
 F_HZ = 50.0                                   # hr_synth dt = 0.02
 LIVE = dict(f_hz=F_HZ, roi=[0, 512, 0, 256], window=32, step=32, flip_x=False, flip_y=False,
-            phase_locked=True)
+            pulse_frames=True)
 EXT = VI.ExternalSettings(y_up=True, velocity_units='unit/s', f_hz=0.0)
 
 

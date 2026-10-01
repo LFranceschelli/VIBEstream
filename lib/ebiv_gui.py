@@ -13,7 +13,8 @@ Structure
                                   streaming sub-mode (EBIV only / manual /
                                   calibration / closed loop) next to it.
          Offline chain         -> record .raw, play it back, generate
-                                  phase-locked frames, run the pyramidal PIV.
+                                  pseudo-images (one per laser pulse), run
+                                  the pyramidal PIV.
                                   Any subset, run in that order, in one go.
     2. Resolution enhancement (panel 2, always visible): tick 'Estimate the
        HR field live' and pick a model.  The coloured status line says, as
@@ -490,7 +491,7 @@ HR_TRAIN_SPEC = [
     P("HR training", "External data", "run.hr.ext_sensor_h", "Sensor height [px]", "int"),
     P("HR training", "Recording", "run.hr.train_raw", "Raw file (blank = Run tab)", "file",
       help="Recording used to build the LR/HR training set. The LR fields are "
-           "computed with the live PIV & ROIs settings; the phase-locked frames use "
+           "computed with the live PIV & ROIs settings; the pseudo-images use "
            "the Acquisition settings (trigger mode must be auto/external)."),
     P("HR training", "Recording", "run.hr.train_start_frame", "First frame", "int"),
     P("HR training", "Recording", "run.hr.train_n_frames", "Frames (0 = all)", "int",
@@ -1107,7 +1108,7 @@ class EbivGUI:
                 ('do_playback', "play back",
                  "Replay the .raw so you can check the recording."),
                 ('do_image_gen', "generate frames",
-                 "Phase-locked .tif frames into RawImg/<acq name>/."),
+                 "Pseudo-images (.tif, one per laser pulse) into RawImg/<acq name>/."),
                 ('do_piv_process', "offline PIV",
                  "Pyramidal PIV on those frames, results into Out/<acq name>/."),
                 ('do_hr_train', "train HR model",
@@ -1602,7 +1603,8 @@ Kalman filter that also uses the time dynamics learned from the training data
 (Franceschelli et al., the three estimators of Sec. 2.2).
 
 TRAINING  (Resolution enhancement > Train a model...)
- 1. A .raw recording of the flow is cut into phase-locked frames.
+ 1. A .raw recording of the flow is cut into pseudo-images, one per laser
+    pulse.
  2. Every field is processed twice:
       LR = the live rt-EBIV processing, with the CURRENT Acquisition and
            PIV & ROIs settings (exactly what the stream will compute);
@@ -1706,7 +1708,7 @@ def model_info_text(path, hdr, live=None):
             if d is None:
                 continue
             L.append(f"   {name:<28s} delta {d:7.4f}" + (f"   TKE ratio {k:5.2f}" if k is not None else ""))
-    ref = hdr.get('lr_processing')
+    ref = vibe_hr.processing_record(hdr)
     L.append("")
     if not ref:
         L.append("LR PROCESSING: no record (model trained outside vibe_train); the "

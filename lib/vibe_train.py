@@ -2,7 +2,7 @@
 vibe_train — build the LR/HR training set from a .raw recording and train the
 HR estimators, entirely in Python (no MATLAB step).
 
-    raw ──> phase-locked pseudo-frames (VIBE, same settings as the live stream)
+    raw ──> pseudo-frames, one per laser pulse (VIBE, same settings as the live stream)
              ├─ LR: single-pass correlation of consecutive frames, with the
              │      SAME correlator, ROI, window, step and validation the live
              │      stream uses                                      (Sec. 3.4)
@@ -78,7 +78,7 @@ class TrainingSettings:
         return dict(f_hz=self.f_hz, roi=self.roi, window=self.lr_window, step=self.lr_step,
                     validate=self.lr_validate, subpixel=self.lr_subpixel,
                     val_threshold=self.val_threshold, val_epsilon=self.val_epsilon,
-                    duty_cycle=self.duty_cycle, phase_locked=True,
+                    duty_cycle=self.duty_cycle, pulse_frames=True,
                     **vibe.processing_settings())
 
 

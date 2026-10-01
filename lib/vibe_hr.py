@@ -879,7 +879,18 @@ def read_model_header(path):
     return h
 
 
-CRITICAL_SETTINGS = ('f_hz', 'roi', 'window', 'step', 'flip_x', 'flip_y', 'phase_locked')
+CRITICAL_SETTINGS = ('f_hz', 'roi', 'window', 'step', 'flip_x', 'flip_y', 'pulse_frames')
+# 'pulse_frames': True = one pseudo-image per laser pulse (trigger auto/external),
+# False = fixed-dt accumulation (trigger 'none').  Models saved before this name
+# was introduced carry it as 'phase_locked'; processing_record() renames it.
+_LEGACY_KEYS = {'phase_locked': 'pulse_frames'}
+
+
+def processing_record(model_or_meta):
+    """The model's LR-processing record, with legacy key names updated."""
+    meta = model_or_meta.meta if hasattr(model_or_meta, 'meta') else model_or_meta
+    ref = meta.get('lr_processing') or {}
+    return {_LEGACY_KEYS.get(k, k): v for k, v in ref.items()}
 
 
 def check_processing(model_or_meta, live: dict):
@@ -889,8 +900,8 @@ def check_processing(model_or_meta, live: dict):
     Returns a list of 'key: live X vs trained Y' strings (empty = consistent).
     Keys you do not know should be omitted from `live`.
     """
-    meta = model_or_meta.meta if hasattr(model_or_meta, 'meta') else model_or_meta
-    ref = meta.get('lr_processing')
+    ref = processing_record(model_or_meta)
+    live = {_LEGACY_KEYS.get(k, k): v for k, v in live.items()}
     if not ref:
         return ["the model carries no LR-processing record (trained outside vibe_train): "
                 "consistency cannot be checked"]

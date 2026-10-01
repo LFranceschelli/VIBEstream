@@ -139,10 +139,10 @@ def run():
     r.trigger_mode = 'none'
     try:
         ebiv_session.run_session(s)
-        check("fixed-dt frames (trigger 'none') refused for a phase-locked model", False)
+        check("fixed-dt frames (trigger 'none') refused for a model trained on per-pulse pseudo-images", False)
     except ValueError as e:
-        check("fixed-dt frames (trigger 'none') refused for a phase-locked model",
-              "phase_locked" in str(e))
+        check("fixed-dt frames (trigger 'none') refused for a model trained on per-pulse pseudo-images",
+              "pulse_frames" in str(e))
     r.trigger_mode = 'auto'
 
     h.model_path = os.path.join(base, "missing.npz")

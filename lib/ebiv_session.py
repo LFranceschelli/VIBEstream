@@ -9,7 +9,7 @@ plus control-system parameters) and runs either
 
     mode='offline'   the file-based chain, in order and in one go:
                      record .raw  ->  play it back  ->  generate
-                     phase-locked frames  ->  pyramidal PIV.
+                     pseudo-images (one per laser pulse)  ->  pyramidal PIV.
 
 Both the GUI and EBIV_Main call this, so there is exactly one place where a
 run is assembled and exactly one set of semantics to keep straight.
@@ -253,8 +253,8 @@ def hr_training_plan(session):
         inputs.append(("recording", raw))
         if run.trigger_mode == 'none':
             problems.append("trigger mode 'none' (fixed-dt frames): the training needs "
-                            "phase-locked frames, set the trigger to auto or external "
-                            "(Acquisition tab)")
+                            "one pseudo-image per laser pulse, set the trigger to auto or "
+                            "external (Acquisition tab)")
     elif src == 'fields':
         lrf = (h.ext_lr_file or '').strip()
         inputs.append(("LR fields", lrf))

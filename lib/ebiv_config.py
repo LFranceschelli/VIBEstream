@@ -1009,8 +1009,8 @@ class RunConfig:
 
     mode :
         'stream'   live camera: EBIV, and optionally the controller.
-        'offline'  the file-based chain: record a .raw, generate phase-locked
-                   frames from it, and run the pyramidal PIV.  Any subset of
+        'offline'  the file-based chain: record a .raw, generate pseudo-images
+                   from it (one per laser pulse), and run the pyramidal PIV.  Any subset of
                    the four steps can be selected; they run in order.
 
     run_mode : only meaningful when mode == 'stream'
@@ -1127,9 +1127,9 @@ class RunConfig:
             need_model=(self.mode == 'stream' and self.hr.enabled))
         if self.mode == 'offline' and self.do_hr_train and self.hr.source == 'raw' \
                 and self.trigger_mode == 'none':
-            problems.append("HR training builds PHASE-LOCKED frames; the live stream "
-                            "must then use trigger mode 'auto' or 'external', not "
-                            "'none'")
+            problems.append("HR training builds one pseudo-image per laser pulse; the "
+                            "live stream must then use trigger mode 'auto' or 'external', "
+                            "not 'none'")
         if (self.do_playback or self.do_image_gen) and not \
                 str(self.raw_filename).strip():
             problems.append("a raw filename is required to play back or "
