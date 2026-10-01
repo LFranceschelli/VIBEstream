@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="assets/logo_256.png" height="120" align="middle" alt="VIBEstream logo">
+  <img src="assets/logo_256.png" height="180" align="middle" alt="VIBEstream logo">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/vibe_banner.webp" height="220" align="middle" alt="EBIV read backwards is VIBE">
+  <img src="assets/vibe_banner.webp" height="300" align="middle" alt="EBIV read backwards is VIBE">
 </p>
 
 # VIBEstream
