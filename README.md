@@ -104,6 +104,30 @@ For external data, the LR grid of the files must match the live grid. That match
 
 **Scope.** A model is valid only for the flow regime and processing it was trained on: no actuated or off-design flows. Variance rescaling is a heuristic.
 
+## Additional information
+
+### Pulsing the laser with an Analog Discovery 3
+
+In pulsed EBIV the laser fires once per pseudo-image. VIBEstream can generate this pulse train with a Digilent [Analog Discovery 3](https://digilent.com/reference/test-and-measurement/analog-discovery-3/start) used as a signal generator. It is driven from Python through the [WaveForms SDK](https://digilent.com/reference/software/waveforms/waveforms-sdk/start), which comes with the free WaveForms software.
+
+- **Laser, Analog Out W1.** Square wave at the acquisition frequency f, so 1/f is the frame separation dt. Defaults: 0–5 V (amplitude 2.5 V, offset 2.5 V) and 10 % duty cycle. Connect W1 to the laser's TTL/modulation input. Alternatives: a DIO pin (`laser_backend='pattern'`), or your own pulse generator (`'external'`, the AD3 does not touch the laser).
+- **Pump or actuator, Analog Out W2.** DC voltage, 0–5 V, used by the manual and closed-loop control modes.
+- **GUI:** *Hardware* tab, tick *Use the Analog Discovery*. **Class:** `vibe.laser_on(f=500)`, `vibe.laser_off()`, `vibe.set_voltage(2.0)`. `vibe.laser_check()` measures the pulse train with the AD3's own scope (wire W1 → 1+).
+- **Before the first run:**
+  - Close the WaveForms application; it locks the device.
+  - Check the pulse train once with an external oscilloscope.
+  - On shutdown the laser line is driven to 0 V, but only a pull-down resistor at the laser input guarantees that the laser stays off.
+
+### Camera trigger input and event accumulation
+
+Each pseudo-image accumulates the events in a window of length `duty_cycle / f` centred on one laser pulse. In the GUI this is set under *Acquisition → Trigger*; in the class, with `trigger=` and `duty_cycle=`. The trigger mode sets how the pulse times are found:
+
+- **`auto`**: the laser phase is measured from the event rate, with a phase-folded histogram at the start of the stream. No wiring is needed.
+- **`external`**: the pulse times come from the camera's **trigger-in**. Send the laser TTL signal (e.g. W1 through a T-connector) to the camera's trigger input as well. The camera timestamps each edge with its own clock, and each window is centred on one edge (one polarity, `trigger_polarity`). Unlike `auto`, which measures the phase once, it also follows a slow drift between the laser and camera clocks over long runs.
+- **`none`**: fixed 1/f windows, not aligned with the pulses. Use it for monitoring or continuous illumination.
+
+`vibe.record(..., log_triggers=True)` also stores the trigger edges in the `.raw` file. The offline frame generation does not use them yet: it finds the phase from the events. The wiring and voltage levels of the trigger input depend on the camera. Check them in Prophesee's [Trigger In/Out](https://support.prophesee.ai/portal/en/kb/articles/trigger-in-out) article and the camera manual before connecting. Metavision Studio shows the trigger events, which lets you check the wiring.
+
 ## Tested
 
 - **Developed and used on:** Windows 10/11; OpenEB 5.2 and 4.6; IDS uEye EVS and Prophesee EVK4 cameras (Sony IMX636 sensor); Analog Discovery 3 for the laser trigger and pump. Other IMX636 cameras with a Metavision HAL plugin should work, but are untested.
