@@ -19,7 +19,7 @@ VIBEstream is for anyone who has just connected a Prophesee-sensor event camera 
 This is an educational reference implementation, written to be read and extended. The faster C++ version is not part of this release.
 
 > L. Franceschelli, E. Amico, C. E. Willert, M. Raiola, G. Cafiero, S. Discetti,
-> *Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry*, Experiments in Fluids (2026, accepted). DOI: to be assigned.
+> *Real-Time Estimation of High-Resolution Flow Fields and Reduced-Order Coordinates from Event-Based Imaging Velocimetry*, Experiments in Fluids (2026). DOI: 10.1007/s00348-026-04335-7.
 > Data: [Zenodo](https://zenodo.org/records/20037404)
 
 https://github.com/user-attachments/assets/ee397704-37f4-475f-b815-36d7e022fa2e
